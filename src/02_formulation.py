@@ -137,3 +137,140 @@ def compute_baseline():
     return rev, prof
 
 BASELINE_REV, BASELINE_PROF = compute_baseline()
+
+# ─────────────────────────────────────────────
+# 2.3  PYOMO MILP MODEL
+# ─────────────────────────────────────────────
+
+def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=None):
+    """
+    Build the linearized discrete-price MILP.
+
+    Parameters
+    ----------
+    min_rev_frac : float  — γ_R, minimum revenue as fraction of baseline
+    min_margin   : float  — γ_Π, minimum profit margin
+    max_avg_inc  : float  — θ_max, max average price increase
+    E_matrix     : ndarray — 7×7 elasticity matrix (default: from CSV)
+
+    Returns
+    -------
+    Pyomo ConcreteModel, ready to solve.
+    """
+    if E_matrix is None:
+        E_matrix = E
+
+    m = pyo.ConcreteModel("PepsiCo_Pricing_MILP")
+
+    # ── Sets ──
+    m.I_P = pyo.Set(initialize=PEPSICO)
+    m.I_C = pyo.Set(initialize=COMPETITOR)
+    m.I   = pyo.Set(initialize=ALL_PRODUCTS)
+    m.K   = pyo.Set(initialize=range(NUM_CANDIDATES))
+
+    # ── Parameters ──
+    m.p0 = pyo.Param(m.I, initialize={
+        i: products.loc[i, "current_price_mxn"] for i in ALL_PRODUCTS})
+    m.V0 = pyo.Param(m.I, initialize={
+        i: products.loc[i, "baseline_volume_units_wk"] for i in ALL_PRODUCTS})
+    m.s  = pyo.Param(m.I, initialize={
+        i: products.loc[i, "size_g"] for i in ALL_PRODUCTS})
+    m.c  = pyo.Param(m.I, initialize={
+        i: products.loc[i, "unit_cost_mxn"] for i in ALL_PRODUCTS})
+
+    # Candidate fractional price changes
+    delta_cand = {}
+    price_cand = {}
+    for i in PEPSICO:
+        for k_idx, pk in enumerate(candidates[i]):
+            delta_cand[i, k_idx] = (pk - products.loc[i, "current_price_mxn"]) \
+                                   / products.loc[i, "current_price_mxn"]
+            price_cand[i, k_idx] = pk
+    m.delta_cand = pyo.Param(m.I_P, m.K, initialize=delta_cand)
+    m.price_cand = pyo.Param(m.I_P, m.K, initialize=price_cand)
+
+    # Competitor follow parameters
+    follow_hero = {i: int(products.loc[i, "follows_product"]) for i in COMPETITOR}
+    follow_rho  = {i: products.loc[i, "follow_ratio"] for i in COMPETITOR}
+
+    # ── Decision Variables ──
+    m.y = pyo.Var(m.I_P, m.K, within=pyo.Binary)
+
+    # ── Derived Expressions (all linear in y) ──
+
+    # δ for PepsiCo products
+    def delta_pep_rule(m, i):
+        return sum(m.delta_cand[i, k] * m.y[i, k] for k in m.K)
+    m.delta_pep = pyo.Expression(m.I_P, rule=delta_pep_rule)
+
+    # δ for all products (competitors follow hero)
+    def delta_all_rule(m, i):
+        if i in PEPSICO:
+            return m.delta_pep[i]
+        else:
+            return follow_rho[i] * m.delta_pep[follow_hero[i]]
+    m.delta = pyo.Expression(m.I, rule=delta_all_rule)
+
+    # New price
+    def pnew_rule(m, i):
+        return m.p0[i] * (1 + m.delta[i])
+    m.pnew = pyo.Expression(m.I, rule=pnew_rule)
+
+    # Predicted volume (linearized: V0 * (1 + Σ E_ij δ_j))
+    def volume_rule(m, i):
+        return m.V0[i] * (1 + sum(E_matrix[i-1, j-1] * m.delta[j]
+                                  for j in ALL_PRODUCTS))
+    m.vol = pyo.Expression(m.I, rule=volume_rule)
+
+    # Revenue per product (linearized)
+    def rev_rule(m, i):
+        return (m.V0[i] * m.p0[i] / m.s[i]) * \
+               (1 + m.delta[i] + sum(E_matrix[i-1, j-1] * m.delta[j]
+                                     for j in ALL_PRODUCTS))
+    m.rev = pyo.Expression(m.I, rule=rev_rule)
+
+    # Profit per product
+    def prof_rule(m, i):
+        return m.rev[i] - m.c[i] * m.vol[i] / m.s[i]
+    m.prof = pyo.Expression(m.I, rule=prof_rule)
+
+    # Totals for PepsiCo
+    m.total_rev  = pyo.Expression(expr=sum(m.rev[i]  for i in PEPSICO))
+    m.total_prof = pyo.Expression(expr=sum(m.prof[i] for i in PEPSICO))
+
+    # ── Objective: maximize PepsiCo revenue ──
+    m.obj = pyo.Objective(expr=m.total_rev, sense=pyo.maximize)
+
+    # ── Constraints ──
+
+    # (C1) Exactly one price per PepsiCo product
+    def selection_rule(m, i):
+        return sum(m.y[i, k] for k in m.K) == 1
+    m.c_selection = pyo.Constraint(m.I_P, rule=selection_rule)
+
+    # (C2) Revenue floor: total revenue ≥ fraction of baseline
+    m.c_rev_floor = pyo.Constraint(
+        expr=m.total_rev >= min_rev_frac * BASELINE_REV)
+
+    # (C3) Margin floor: total profit ≥ fraction of total revenue
+    m.c_margin = pyo.Constraint(
+        expr=m.total_prof >= min_margin * m.total_rev)
+
+    # (C4) Price ladders (larger pack ≤ per-gram price of smaller pack)
+    def ladder_rule(m, pair_idx):
+        big, small = LADDER_PAIRS[pair_idx]
+        return m.pnew[big] / m.s[big] <= m.pnew[small] / m.s[small]
+    m.c_ladder = pyo.Constraint(range(len(LADDER_PAIRS)), rule=ladder_rule)
+
+    # (C5) Non-negative volume
+    def vol_pos_rule(m, i):
+        return m.vol[i] >= 0
+    m.c_vol_pos = pyo.Constraint(m.I, rule=vol_pos_rule)
+
+    # (C6) Maximum average price increase
+    total_p0 = sum(products.loc[i, "current_price_mxn"] for i in PEPSICO)
+    m.c_avg_increase = pyo.Constraint(
+        expr=sum(m.p0[i] * m.delta_pep[i] for i in PEPSICO)
+             <= max_avg_inc * total_p0)
+
+    return m

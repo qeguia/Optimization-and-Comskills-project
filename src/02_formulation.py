@@ -92,3 +92,32 @@ FORMULATION
 
 ==============================================================================
 """
+
+import pandas as pd
+import numpy as np
+import pyomo.environ as pyo
+import os
+
+# ─────────────────────────────────────────────
+# 2.1  LOAD DATA
+# ─────────────────────────────────────────────
+
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+
+products = pd.read_csv(os.path.join(DATA_DIR, "products.csv")).set_index("id")
+elasticity_raw = pd.read_csv(os.path.join(DATA_DIR, "elasticity_matrix.csv"))
+candidates_raw = pd.read_csv(os.path.join(DATA_DIR, "candidate_prices.csv"))
+
+E = elasticity_raw.drop(columns=["product_id"]).values
+
+candidates = {}
+for pid, group in candidates_raw.groupby("product_id"):
+    candidates[pid] = sorted(group["price_option"].tolist())
+
+PEPSICO = products[products["is_pepsico"] == 1].index.tolist()
+COMPETITOR = products[products["is_pepsico"] == 0].index.tolist()
+ALL_PRODUCTS = list(products.index)
+NUM_CANDIDATES = 5
+
+# Price-ladder pairs: (large_product, small_product) within same brand
+LADDER_PAIRS = [(1, 2), (3, 4)]  # Lays 170g/62g, Doritos 170g/62g

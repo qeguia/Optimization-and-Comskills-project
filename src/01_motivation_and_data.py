@@ -147,3 +147,25 @@ print(f"  PepsiCo weekly revenue : {total_rev:,.1f} MXN")
 print(f"  PepsiCo weekly profit  : {total_prof:,.1f} MXN")
 print(f"  PepsiCo margin         : {total_prof/total_rev:.1%}")
 print(f"  PepsiCo total volume   : {total_vol:,.0f} units")
+
+# ─────────────────────────────────────────────
+# 1.3  VISUALIZATION: Elasticity Heatmap
+# ─────────────────────────────────────────────
+
+labels = [products.loc[i, "name"] for i in products.index]
+
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.heatmap(E, annot=True, fmt=".2f", cmap="RdBu_r", center=0,
+            xticklabels=labels, yticklabels=labels, ax=ax,
+            linewidths=0.5, linecolor="white")
+ax.set_title("Cross-Price Elasticity Matrix\n(negative diagonal = own-price, "
+             "positive off-diagonal = substitutes)", fontsize=10)
+plt.xticks(rotation=35, ha="right", fontsize=8)
+plt.yticks(rotation=0, fontsize=8)
+plt.tight_layout()
+plt.savefig("elasticity_heatmap.png", dpi=150, bbox_inches="tight")
+print("\nSaved elasticity_heatmap.png")
+
+print("\n" + "=" * 60)
+print("  DATA PREPARATION COMPLETE")
+print("=" * 60)

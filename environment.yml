@@ -9,6 +9,7 @@ dependencies:
   - glpk
   - ipykernel
   - jupyter
+  - matplotlib
   - pip
   - pip:
     - pyomo

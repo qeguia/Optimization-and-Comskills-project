@@ -10,6 +10,7 @@ dependencies:
   - ipykernel
   - jupyter
   - matplotlib
+  - seaborn
   - pip
   - pip:
     - pyomo

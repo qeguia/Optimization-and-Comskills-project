@@ -165,7 +165,3 @@ plt.yticks(rotation=0, fontsize=8)
 plt.tight_layout()
 plt.savefig("elasticity_heatmap.png", dpi=150, bbox_inches="tight")
 print("\nSaved elasticity_heatmap.png")
-
-print("\n" + "=" * 60)
-print("  DATA PREPARATION COMPLETE")
-print("=" * 60)

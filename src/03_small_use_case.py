@@ -99,7 +99,7 @@ print("\n" + "=" * 60)
 print("  3.3  SANITY CHECKS")
 print("=" * 60)
 
-# ── Check 1: Zero elasticities → max prices ──
+# ── Check 1: Zero elasticities -> max prices ──
 print("\n  [Check 1] Zero elasticities -> optimizer should pick max prices")
 E_zero = np.zeros((7, 7))
 m1 = build_model(E_matrix=E_zero, min_rev_frac=0.0, min_margin=0.0)
@@ -115,7 +115,7 @@ for i in PEPSICO:
           f"{'PASS' if ok else 'FAIL'}")
 print(f"  -> {'PASS' if all_max else 'FAIL'}")
 
-# ── Check 2: Very high own-elasticity → lower prices ──
+# ── Check 2: Very high own-elasticity -> lower prices ──
 print("\n  [Check 2] High own-elasticity (-3.0) -> should keep or lower prices")
 E_high = E.copy()
 for i in range(5):
@@ -157,3 +157,28 @@ print(f"\n  [Check 4] Revenue floor: {opt_rev:.1f} ≥ "
 # ── Check 5: Margin floor binding? ──
 print(f"  [Check 5] Margin floor: {opt_prof/opt_rev:.1%} ≥ 20%  "
       f" -> {'PASS' if opt_prof/opt_rev >= 0.20 - 0.001 else 'FAILa'}")
+
+# ==============================================================
+# 3.4  COMPARISON: OPTIMAL vs. NAIVE "+5% UNIFORM"
+# ==============================================================
+
+# Compute naive revenue: raise all prices by 5%
+naive_rev = 0.0
+for i in PEPSICO:
+    delta_naive = {j: 0.05 if j in PEPSICO else 0.025 for j in ALL_PRODUCTS}
+    vol_i = products.loc[i, "baseline_volume_units_wk"] * (
+        1 + sum(E[i-1, j-1] * delta_naive[j] for j in ALL_PRODUCTS))
+    rev_i = (products.loc[i, "baseline_volume_units_wk"] *
+             products.loc[i, "current_price_mxn"] /
+             products.loc[i, "size_g"]) * (
+        1 + delta_naive[i] + sum(E[i-1, j-1] * delta_naive[j]
+                                  for j in ALL_PRODUCTS))
+    naive_rev += rev_i
+
+print(f"\n  Baseline revenue   : {BASELINE_REV:,.1f} MXN/week")
+print(f"  Naive +5% revenue  : {naive_rev:,.1f} MXN/week  "
+      f"({(naive_rev/BASELINE_REV - 1)*100:+.2f}%)")
+print(f"  MILP optimal rev   : {opt_rev:,.1f} MXN/week  "
+      f"({(opt_rev/BASELINE_REV - 1)*100:+.2f}%)")
+print(f"\n  Optimizer advantage : {opt_rev - naive_rev:+.1f} MXN/week "
+      f"over naive strategy")

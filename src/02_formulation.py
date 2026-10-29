@@ -121,3 +121,19 @@ NUM_CANDIDATES = 5
 
 # Price-ladder pairs: (large_product, small_product) within same brand
 LADDER_PAIRS = [(1, 2), (3, 4)]  # Lays 170g/62g, Doritos 170g/62g
+
+# ─────────────────────────────────────────────
+# 2.2  COMPUTE BASELINE
+# ─────────────────────────────────────────────
+
+def compute_baseline():
+    rev, prof = 0.0, 0.0
+    for i in PEPSICO:
+        p = products.loc[i]
+        units = p["baseline_volume_units_wk"] / p["size_g"]
+        r = units * p["current_price_mxn"]
+        rev += r
+        prof += r - p["unit_cost_mxn"] * units
+    return rev, prof
+
+BASELINE_REV, BASELINE_PROF = compute_baseline()

@@ -182,3 +182,78 @@ print(f"  MILP optimal rev   : {opt_rev:,.1f} MXN/week  "
       f"({(opt_rev/BASELINE_REV - 1)*100:+.2f}%)")
 print(f"\n  Optimizer advantage : {opt_rev - naive_rev:+.1f} MXN/week "
       f"over naive strategy")
+
+
+# ==============================================================
+# 3.5  VISUALIZATIONS
+# ==============================================================
+
+names = [products.loc[i, "name"] for i in PEPSICO]
+old_prices = [products.loc[i, "current_price_mxn"] for i in PEPSICO]
+new_prices = []
+for i in PEPSICO:
+    ck = [k for k in range(5) if pyo.value(model.y[i, k]) > 0.5][0]
+    new_prices.append(candidates[i][ck])
+
+x = np.arange(len(PEPSICO))
+
+fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+
+# ── Chart 1: Current vs. Optimal Prices ──
+ax = axes[0]
+ax.bar(x - 0.18, old_prices, 0.35, label="Current Price", color="#4472C4")
+ax.bar(x + 0.18, new_prices, 0.35, label="Optimal Price", color="#ED7D31")
+ax.set_xticks(x)
+ax.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
+ax.set_ylabel("Price (MXN)")
+ax.set_title("Current vs. Optimal Prices")
+ax.legend(fontsize=8)
+for xi, op, np_ in zip(x, old_prices, new_prices):
+    if np_ != op:
+        ax.annotate(f"{np_-op:+d}", (xi + 0.18, np_ + 0.3),
+                    ha="center", fontsize=8, fontweight="bold",
+                    color="green" if np_ < op else "red")
+
+# ── Chart 2: Volume Changes ──
+ax = axes[1]
+vol_changes = []
+for i in PEPSICO:
+    v_old = products.loc[i, "baseline_volume_units_wk"]
+    v_new = pyo.value(model.vol[i])
+    vol_changes.append((v_new - v_old) / v_old * 100)
+
+colors = ["#2ca02c" if v >= 0 else "#d62728" for v in vol_changes]
+bars = ax.bar(x, vol_changes, color=colors)
+ax.set_xticks(x)
+ax.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
+ax.set_ylabel("Volume Change (%)")
+ax.set_title("Predicted Volume Impact")
+ax.axhline(0, color="black", linewidth=0.5)
+for xi, vc in zip(x, vol_changes):
+    ax.text(xi, vc + 0.5, f"{vc:+.1f}%", ha="center", fontsize=8)
+
+# ── Chart 3: Revenue Waterfall ──
+ax = axes[2]
+rev_deltas = []
+for i in PEPSICO:
+    rev_old = (products.loc[i, "baseline_volume_units_wk"] *
+               products.loc[i, "current_price_mxn"] /
+               products.loc[i, "size_g"])
+    rev_new = pyo.value(model.rev[i])
+    rev_deltas.append(rev_new - rev_old)
+
+colors2 = ["#2ca02c" if d >= 0 else "#d62728" for d in rev_deltas]
+ax.bar(x, rev_deltas, color=colors2)
+ax.set_xticks(x)
+ax.set_xticklabels(names, rotation=30, ha="right", fontsize=8)
+ax.set_ylabel("Revenue Change (MXN/week)")
+ax.set_title("Revenue Change by Product")
+ax.axhline(0, color="black", linewidth=0.5)
+for xi, rd in zip(x, rev_deltas):
+    ax.text(xi, rd + 0.2, f"{rd:+.1f}", ha="center", fontsize=8)
+
+plt.suptitle("PepsiCo Mexico — Discrete-Price MILP Optimization Results",
+             fontsize=12, fontweight="bold", y=1.02)
+plt.tight_layout()
+plt.savefig("base_case_results.png", dpi=150, bbox_inches="tight")
+print("\n  Saved base_case_results.png")

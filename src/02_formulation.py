@@ -274,7 +274,6 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
 
     return m
 
-
 # ─────────────────────────────────────────────
 # 2.4  SOLVER
 # ─────────────────────────────────────────────

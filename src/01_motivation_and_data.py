@@ -81,7 +81,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
+# ─────────────────────────────────────────────
 # 1.1  LOAD DATA FROM CSV
+# ─────────────────────────────────────────────
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
@@ -120,3 +122,28 @@ for pid, prices in candidates.items():
     name = products.loc[pid, "name"]
     current = products.loc[pid, "current_price_mxn"]
     print(f"  {name:25s}  current={current}  options={prices}")
+
+# ─────────────────────────────────────────────
+# 1.2  COMPUTE BASELINE KPIs
+# ─────────────────────────────────────────────
+print("\n" + "=" * 60)
+print("  BASELINE KPIs (before optimization)")
+print("=" * 60)
+
+pepsico_ids = products[products["is_pepsico"] == 1].index.tolist()
+
+total_rev, total_prof, total_vol = 0.0, 0.0, 0.0
+for i in products.index:
+    p = products.loc[i]
+    units = p["baseline_volume_units_wk"] / p["size_g"]
+    rev_i = units * p["current_price_mxn"]
+    prof_i = rev_i - p["unit_cost_mxn"] * units
+    if p["is_pepsico"]:
+        total_rev += rev_i
+        total_prof += prof_i
+        total_vol += p["baseline_volume_units_wk"]
+
+print(f"  PepsiCo weekly revenue : {total_rev:,.1f} MXN")
+print(f"  PepsiCo weekly profit  : {total_prof:,.1f} MXN")
+print(f"  PepsiCo margin         : {total_prof/total_rev:.1%}")
+print(f"  PepsiCo total volume   : {total_vol:,.0f} units")

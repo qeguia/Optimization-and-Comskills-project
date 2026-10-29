@@ -308,3 +308,35 @@ def extract_results(m):
             "Revenue (MXN)": f"{rev_new:.1f}",
         })
     return pd.DataFrame(rows)
+
+# ─────────────────────────────────────────────
+# 2.5  TEST: Build and solve, print formulation summary
+# ─────────────────────────────────────────────
+
+if __name__ == "__main__":
+
+    model = build_model()
+
+    print(f"\n  Decision variables : {len(list(model.y))} binary (y_{{i,k}})")
+    print(f"  Products optimized : {len(PEPSICO)}")
+    print(f"  Candidates/product : {NUM_CANDIDATES}")
+    print(f"  Constraints        : selection({len(PEPSICO)}) + "
+          f"rev_floor(1) + margin(1) + ladders({len(LADDER_PAIRS)}) + "
+          f"vol_pos({len(ALL_PRODUCTS)}) + avg_inc(1)")
+    print(f"  Baseline revenue   : {BASELINE_REV:,.1f} MXN/week")
+    print(f"  Baseline margin    : {BASELINE_PROF/BASELINE_REV:.1%}")
+
+    print(f"\n  Solving with GLPK...")
+    result = solve_model(model)
+    print(f"  Solver status: {result.solver.status}")
+
+    opt_rev = pyo.value(model.total_rev)
+    opt_prof = pyo.value(model.total_prof)
+    print(f"\n  Optimal revenue : {opt_rev:,.1f} MXN/week")
+    print(f"  Optimal profit  : {opt_prof:,.1f} MXN/week")
+    print(f"  Optimal margin  : {opt_prof/opt_rev:.1%}")
+    print(f"  Revenue uplift  : {(opt_rev/BASELINE_REV - 1)*100:+.2f}%")
+
+    print("\n  Results table:")
+    df = extract_results(model)
+    print(df.to_string(index=False))

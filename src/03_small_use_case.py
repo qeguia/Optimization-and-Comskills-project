@@ -89,3 +89,71 @@ if max_error < 5.0:
     print("  :) All errors < 5% — linearization is valid for this price range")
 else:
     print("  :( Some errors exceed 5% — consider tighter price bounds")
+
+
+# ==============================================================
+# 3.3  SANITY CHECKS
+# ==============================================================
+
+print("\n" + "=" * 60)
+print("  3.3  SANITY CHECKS")
+print("=" * 60)
+
+# ── Check 1: Zero elasticities → max prices ──
+print("\n  [Check 1] Zero elasticities -> optimizer should pick max prices")
+E_zero = np.zeros((7, 7))
+m1 = build_model(E_matrix=E_zero, min_rev_frac=0.0, min_margin=0.0)
+solve_model(m1)
+all_max = True
+for i in PEPSICO:
+    chosen_k = [k for k in range(5) if pyo.value(m1.y[i, k]) > 0.5][0]
+    pk = candidates[i][chosen_k]
+    max_p = max(candidates[i])
+    ok = pk == max_p
+    all_max = all_max and ok
+    print(f"    {products.loc[i, 'name']:25s}  chosen={pk}  max={max_p}  "
+          f"{'PASS' if ok else 'FAIL'}")
+print(f"  -> {'PASS' if all_max else 'FAIL'}")
+
+# ── Check 2: Very high own-elasticity → lower prices ──
+print("\n  [Check 2] High own-elasticity (-3.0) -> should keep or lower prices")
+E_high = E.copy()
+for i in range(5):
+    E_high[i, i] = -3.0
+m2 = build_model(E_matrix=E_high, min_rev_frac=0.0, min_margin=0.0)
+solve_model(m2)
+all_lower = True
+for i in PEPSICO:
+    chosen_k = [k for k in range(5) if pyo.value(m2.y[i, k]) > 0.5][0]
+    pk = candidates[i][chosen_k]
+    p0 = products.loc[i, "current_price_mxn"]
+    direction = "UP" if pk > p0 else ("UP" if pk < p0 else "=")
+    ok = pk <= p0
+    all_lower = all_lower and ok
+    print(f"    {products.loc[i, 'name']:25s}  {p0}→{pk} {direction}  "
+          f"{'PASS' if ok else 'FAIL'}")
+print(f"  -> {'PASS' if all_lower else 'PARTIAL (some raised)'}")
+
+# ── Check 3: Price ladders satisfied ──
+print("\n  [Check 3] Price ladders respected?")
+ladder_ok = True
+for big, small in [(1, 2), (3, 4)]:
+    kb = [k for k in range(5) if pyo.value(model.y[big, k]) > 0.5][0]
+    ks = [k for k in range(5) if pyo.value(model.y[small, k]) > 0.5][0]
+    ppg_big = candidates[big][kb] / products.loc[big, "size_g"]
+    ppg_sm  = candidates[small][ks] / products.loc[small, "size_g"]
+    ok = ppg_big <= ppg_sm + 1e-6
+    ladder_ok = ladder_ok and ok
+    brand = products.loc[big, "brand"]
+    print(f"    {brand}: 170g={ppg_big:.4f} MXN/g  ≤  "
+          f"62g={ppg_sm:.4f} MXN/g  {'PASS' if ok else 'FAIL'}")
+print(f"  -> {'PASS' if ladder_ok else 'FAIL'}")
+
+# ── Check 4: Revenue floor binding? ──
+print(f"\n  [Check 4] Revenue floor: {opt_rev:.1f} ≥ "
+      f"{0.95*BASELINE_REV:.1f}  "
+      f" -> {'PASS' if opt_rev >= 0.95*BASELINE_REV - 0.01 else 'FAIL'}")
+
+# ── Check 5: Margin floor binding? ──
+print(f"  [Check 5] Margin floor: {opt_prof/opt_rev:.1%} ≥ 20%  "
+      f" -> {'PASS' if opt_prof/opt_rev >= 0.20 - 0.001 else 'FAILa'}")

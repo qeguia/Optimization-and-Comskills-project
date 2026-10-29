@@ -58,3 +58,34 @@ print(f"  Revenue uplift    : {(opt_rev/BASELINE_REV - 1)*100:+.2f}%")
 
 df_results = extract_results(model)
 print(f"\n{df_results.to_string(index=False)}")
+
+# ==============================================================
+# 3.2  LINEARIZATION ACCURACY CHECK
+# ==============================================================
+
+print("\n  Comparing our linear approximation vs. the exact exponential model (from the paper) at the optimal prices:\n")
+
+delta_vals = {j: pyo.value(model.delta[j]) for j in ALL_PRODUCTS}
+
+max_error = 0.0
+for i in ALL_PRODUCTS:
+    # Our linear approximation
+    v_linear = products.loc[i, "baseline_volume_units_wk"] * (
+        1 + sum(E[i-1, j-1] * delta_vals[j] for j in ALL_PRODUCTS))
+
+    # Exact exponential (paper's Eq. 24)
+    exponent = sum(E[i-1, j-1] * np.log(1 + delta_vals[j])
+                   for j in ALL_PRODUCTS)
+    v_exact = products.loc[i, "baseline_volume_units_wk"] * np.exp(exponent)
+
+    error = abs(v_linear - v_exact) / v_exact * 100
+    max_error = max(max_error, error)
+    print(f"  {products.loc[i, 'name']:25s}  "
+          f"Linear={v_linear:7.1f}  Exact={v_exact:7.1f}  "
+          f"Error={error:.2f}%")
+
+print(f"\n  Maximum linearization error: {max_error:.2f}%")
+if max_error < 5.0:
+    print("  :) All errors < 5% — linearization is valid for this price range")
+else:
+    print("  :( Some errors exceed 5% — consider tighter price bounds")

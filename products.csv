@@ -1,8 +1,0 @@
-id,name,brand,size_g,current_price_mxn,unit_cost_mxn,baseline_volume_units_wk,is_pepsico,follows_product,follow_ratio
-1,Lays Classic 170g,Lays,170,22,10,500,1,,0
-2,Lays Classic 62g,Lays,62,14,6,800,1,,0
-3,Doritos Nacho 170g,Doritos,170,24,11,350,1,,0
-4,Doritos Nacho 62g,Doritos,62,15,7,600,1,,0
-5,Sabritas Adobadas 170g,Sabritas,170,20,9,450,1,,0
-6,Barcel Chips 170g,Barcel,170,19,9,400,0,1,0.5
-7,Barcel Chips 62g,Barcel,62,13,6,700,0,2,0.5

@@ -155,7 +155,7 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
 
     Returns
     -------
-    Pyomo ConcreteModel, ready to solve.
+    Pyomo ConcreteModel.
     """
     if E_matrix is None:
         E_matrix = E
@@ -183,8 +183,7 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
     price_cand = {}
     for i in PEPSICO:
         for k_idx, pk in enumerate(candidates[i]):
-            delta_cand[i, k_idx] = (pk - products.loc[i, "current_price_mxn"]) \
-                                   / products.loc[i, "current_price_mxn"]
+            delta_cand[i, k_idx] = (pk - products.loc[i, "current_price_mxn"]) / products.loc[i, "current_price_mxn"]
             price_cand[i, k_idx] = pk
     m.delta_cand = pyo.Param(m.I_P, m.K, initialize=delta_cand)
     m.price_cand = pyo.Param(m.I_P, m.K, initialize=price_cand)
@@ -274,3 +273,39 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
              <= max_avg_inc * total_p0)
 
     return m
+
+
+# ─────────────────────────────────────────────
+# 2.4  SOLVER
+# ─────────────────────────────────────────────
+
+def solve_model(m, solver_name="glpk"):
+    """Solve the Pyomo model with the given solver."""
+    solver = pyo.SolverFactory(solver_name)
+    result = solver.solve(m, tee=False)
+    return result
+
+
+def extract_results(m):
+    """Extract a results DataFrame from a solved model."""
+    rows = []
+    for i in PEPSICO:
+        chosen_k = [k for k in range(NUM_CANDIDATES)
+                     if pyo.value(m.y[i, k]) > 0.5][0]
+        new_p = candidates[i][chosen_k]
+        old_p = products.loc[i, "current_price_mxn"]
+        delta_pct = (new_p - old_p) / old_p * 100
+        vol_new = pyo.value(m.vol[i])
+        vol_old = products.loc[i, "baseline_volume_units_wk"]
+        rev_new = pyo.value(m.rev[i])
+        rows.append({
+            "Product": products.loc[i, "name"],
+            "Old Price": old_p,
+            "New Price": new_p,
+            "Price Δ%": f"{delta_pct:+.1f}%",
+            "Old Volume": vol_old,
+            "New Volume": f"{vol_new:.0f}",
+            "Volume Δ%": f"{(vol_new - vol_old)/vol_old*100:+.1f}%",
+            "Revenue (MXN)": f"{rev_new:.1f}",
+        })
+    return pd.DataFrame(rows)

@@ -176,7 +176,8 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
     m.s  = pyo.Param(m.I, initialize={
         i: products.loc[i, "size_g"] for i in ALL_PRODUCTS})
     m.c  = pyo.Param(m.I, initialize={
-        i: products.loc[i, "unit_cost_mxn"] for i in ALL_PRODUCTS})
+        i: products.loc[i, "unit_cost_mxn"] for i in ALL_PRODUCTS},
+        mutable=True)
 
     # Candidate fractional price changes
     delta_cand = {}

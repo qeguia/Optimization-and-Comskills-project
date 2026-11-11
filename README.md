@@ -5,29 +5,25 @@ Optimization I and Communication Skills
 
 ## Overview
 
-This project performs an applied statistical analysis of housing affordability across European countries using official public data sources. The analysis integrates data engineering, statistical modelling, and visualization to explore how housing prices evolve across countries and regions.
+This project applies Mixed-Integer Linear Programming (MILP) to solve base pricing optimization for PepsiCo snack products across Mexican convenience stores (OXXO retail channel). 
 
-* **Eurostat API** (European data)
-* **INE API** (Spanish national data)
-
-The objective is to understand how housing prices evolve and compare affordability between countries and regions using data science and statistical methods.
+The project adapts the non-linear demand model presented in Llenas et al. (2026) (*"PepsiCo Deploys AI-Driven Pricing and Promotion Optimization at Scale"*, INFORMS Journal on Applied Analytics) by linearizing the volume response function using a first-order Taylor series expansion.
 
 The project integrates:
-- Data collection from APIs (Eurostat and INE)
-- Data cleaning and transformation
-- Statistical analysis and comparison
-- Visualization of trends and regional differences
-- A scoring model for evaluating relative performance
+- Data Engineering & Setup: Processing synthetic convenience store data for 7 SKUs (5 PepsiCo + 2 Competitors), discrete Peso price points, and a 7×7 cross-price elasticity matrix.
+- MILP Pyomo Formulation: Discrete binary decision choices ($y_{i,k} \in \{0,1\}$), volume linearization, price-ladder rules, margin protection bounds, and revenue floors.
+- Solver Execution & Performance Analysis: Solving the base case to provable global optimality.
+- Sensitivity & What-If Parameter Analysis: Testing cost inflation squeezes, competitor price wars, and margin floor rigidity.
 
 ---
 
-## Installation
+# Installation
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/qeguia/project.git
-cd project
+git clone https://github.com/qeguia/Optimization-and-Comskills-project.git
+cd Optimization-and-Comskills-project
 ```
 
 ### 2. Create the environment using the .yml file
@@ -37,184 +33,151 @@ conda env create -f environment.yml
 ```
 
 ### 3. Activate the environment
+
 ```bash
-conda activate project
+conda activate optimization-project
 ```
 
 ---
 
 ## Usage
-This project uses a `src/`-based structure. 
-The project is executed through a unified command-line interface that dispatches execution depending on the selected data source.
-To ensure imports work correctly, all commands must be executed from inside the `src` directory:
+
+This project uses a modular `src/`-based structure. To ensure imports work correctly, all commands must be executed from inside the `src/` directory:
 
 ```bash
 cd src
 ```
 
-From there, run the project using the main entry point:
+### Running the End-to-End Pipeline
+Execute the pipeline step-by-step:
+
+#### 1. Motivation & Data Inspection (Step 1)
+Loads product catalogs, candidate price options, and computes baseline financial KPIs:
 ```bash
-python main.py <source> [options]
+python 01_motivation_and_data.py
 ```
 
-Where ```<source>``` is one of:
-- ```eurostat``` → European data analysis
-- ```ine``` → Spain regional analysis
-- ```stats```→ Statistical scoring model
-  
-Note: the `stats` mode requires a country name as a positional argument.
-
-### Eurostat analysis:
-#### Spain vs EU average:
-
+#### 2. Model Formulation & Baseline Build (Step 2)
+Defines the Pyomo MILP model, mathematical decision variables, and constraint structures:
 ```bash
-python main.py eurostat
+python 02_formulation.py
 ```
 
-#### Country comparison:
-
+#### 3. Model Validation & Linearization Checks (Step 3)
+Evaluates Taylor approximation accuracy against the exact exponential model and executes 5 sanity checks:
 ```bash
-python main.py eurostat --country1 ES --country2 PT
+python 03_small_use_case.py
 ```
 
-### INE Regional Analysis
-To produce a bar chart by region
-
+#### 4. Realistic Use Case & Pyomo Solver Execution (Step 4)
+Solves the convenience store portfolio model and compares MILP optimal strategy against status quo and naive rules:
 ```bash
-python main.py ine
+python 04_realistic_use_case.py
 ```
 
-### Statistical Model
-Compute the score for a specific country:
-
+#### 5. Managerial What-If Sensitivity Analysis (Step 5)
+Runs parameter experiments (cost inflation squeeze, competitor price war, margin floor variations) and generates sensitivity plots:
 ```bash
-python main.py stats Spain
+python 05_sensitivity_analysis.py
 ```
 
-With custom weighting parameter:
+#### 6. Managerial Synthesis & Insights Report (Step 6)
+Aggregates financial KPIs, generates an executive strategy comparison table, and prints managerial takeaways:
 ```bash
-python main.py stats Spain --alpha 0.5
+python 06_managerial_analysis.py
 ```
-Available countries:
-- Spain
-- France
-- Germany
-- Hungary
-
-
----
-## Output Example
-
-### Eurostat Analysis
-
 
 ---
 
-## Statistical Model
+## Mathematical Model Formulation
 
-The project includes a scoring model to compare countries in terms of housing affordability performance. The values of ´P_i´ and ´A_i´ are derived from the statistical analysis described in the report.
+The optimization model determines discrete integer shelf prices $p_i$ for each PepsiCo product $i \in I_P$ to maximize total portfolio revenue while respecting operational constraints.
 
-### Model Definition
-
-Each country is characterized by two quantities:
-
-- `P_i`: probability that the country outperforms others  
-- `A_i`: performance indicator derived from the data  
-
-Since `A_i` may not be directly comparable across countries, it is normalized:
+### 1. Volume Linearization (First-Order Taylor Expansion)
+The original paper utilizes an exponential volume response equation:
 
 $$
-A_i^{norm} = \frac{A_i}{\max(A)}
+V_i = V_i^0 \cdot \exp\left( \sum_{j \in I} E_{i,j} \ln\frac{p_j}{p_j^0} \right)
 $$
 
-The final score is defined as:
+For small price changes ($\pm 10\%$ to $15\%$), we approximate this via a first-order Taylor series expansion:
 
 $$
-S_i = \alpha P_i + (1 - \alpha) A_i^{norm}
+V_i \approx V_i^0 \left( 1 + \sum_{j \in I} E_{i,j} \delta_j \right)
 $$
 
-where `alpha` ∈ [0, 1] is a weighting parameter controlling the trade-off between both components.
+where the fractional price change $\delta_j$ of Stock Keeping Unit(SKU) $j$ is defined as:
 
-### Interpretation
+$$
+\delta_j = \frac{p_j - p_j^0}{p_j^0}
+$$
 
-| Component     | Meaning |
-|--------------|--------|
-| `P_i`        | Probability that a country outperforms others |
-| `A_i_norm`   | Normalized performance magnitude |
-| `alpha`      | Weight controlling the balance between both components |
+and $E_{i,j}$ represents the cross-price elasticity between product $i$ and product $j$.
 
-**Effect of alpha:**
-- `alpha → 1`: prioritizes probability
-- `alpha → 0`: prioritizes performance magnitude
+### 2. Decision Variables & Price Choice
+Since Mexican shelf prices are restricted to integer Pesos, we define binary variables $y_{i,k} \in \{0, 1\}$ for each product $i$ and candidate price index $k$:
 
+$$
+\delta_i = \sum_k \left( \frac{p_{i,k} - p_i^0}{p_i^0} \right) y_{i,k}
+$$
+
+### 3. Optimization Model Structure
+
+$$
+\max_{y} \quad \sum_{i \in I_P} \text{Rev}_i \approx \sum_{i \in I_P} \left( \frac{V_i^0 p_i^0}{s_i} \right) \left( 1 + \delta_i + \sum_{j \in I} E_{i,j} \delta_j \right)
+$$
+
+$$\text{such that}$$
+
+| Constraint | Mathematical Expression | Operational Interpretation |
+| :--- | :--- | :--- |
+| Single Price Choice | $\sum_k y_{i,k} = 1 \quad \forall i \in I_P$ | Exactly one shelf price option selected per SKU. |
+| Price Ladder | $\frac{p_{\text{large}}}{s_{\text{large}}} \le \frac{p_{\text{small}}}{s_{\text{small}}}$ | 170g family packs must maintain lower price-per-gram than 62g single-serve packs. |
+| Gross Margin Floor | $\sum_i \text{Profit}_i \ge \gamma_{\Pi} \sum_i \text{Rev}_i$ | Total portfolio gross profit margin must stay $\ge 20\%$. |
+| Revenue Floor | $\sum_i \text{Rev}_i \ge \gamma_R \cdot \text{Rev}_{\text{baseline}}$ | Total weekly revenue must stay $\ge 95\%$ of status quo baseline. |
+| Avg Price Increase | $\frac{\sum_i p_i^0 \delta_i}{\sum_i p_i^0} \le \theta_{\max}$ | Weighted portfolio price increases capped at $+10\%$. |
 
 ---
 
 ## Project Structure
 
 ```
-project/
-│── src/
-│   ├── main.py              # Entry point (DO NOT bypass)
-│   ├── main_eurostat.py     # Eurostat pipeline
-│   ├── main_ine.py          # INE pipeline
-│   ├── mainstats.py         # Statistical model
-│   ├── banner.py 
-│   ├── analysis/
-│   ├── data_cleaning/
-│   └── plot/
+Optimization-and-Comskills-project/
+├── data/
+│   ├── candidate_prices.csv        # 5 discrete integer Peso options per SKU
+│   ├── elasticity_matrix.csv       # 7x7 cross-price elasticity matrix
+│   └── products.csv                # SKU catalog, base prices, costs, baseline volumes
 │
-│── images/
-│── tests/
-│── docs/
-│── environment.yml
-│── setup.py
-│── README.md
+├── src/
+│   ├── 01_motivation_and_data.py   # Step 1: Data setup & baseline KPIs
+│   ├── 02_formulation.py            # Step 2: Pyomo MILP builder & solver wrapper
+│   ├── 03_small_use_case.py        # Step 3: Validation, Taylor error & sanity checks
+│   ├── 04_realistic_use_case.py    # Step 4: Pyomo solver & benchmark comparison
+│   ├── 05_sensitivity_analysis.py # Step 5: Cost, retaliation & margin What-Ifs
+│   └── 06_managerial_analysis.py   # Step 6: Executive synthesis & trade-off matrix
+│
+├── pepsico_pricing_poster.html     # Single-page A4 Landscape Academic Poster
+├── environment.yml                 # Conda dependencies specification
+└── README.md                       # Project documentation
 ```
 
 ---
 
-## Testing
-
-Run all tests:
-
-```bash
-pytest -v
-```
-
-Tests cover:
-
-* Data cleaning
-* Analysis functions
-* Error handling
-* Edge cases
-
----
-
-## Technologies:
+## Technologies Used
 
 * Python
+* Pyomo
+* HiGHS / GLPK / CBC
 * Pandas
 * NumPy
-* Plotnine
-* Pytest
+* Matplotlib & Seaborn
 
 ---
 
-## Contributing:
+## License, Academic Context & Reference
 
-This is an academic project, but contributions should follow basic software practices:
-- Use feature branches
-- Write clear commit messages
-- Ensure code is tested before merging
-- Maintain modular and readable code
-
----
-
-## License:
-
-This project is intended for academic use within:
-- Optimization I
-- Communication Skills
+* This project is intended for academic use within: Optimization I & Communication Skills
+* Team: Matisse Aaftink-De Luca · Fernando Cordero · Qin Eguía · Tamara Shopova
+* Reference Article: Llenas et al. (2026) *"PepsiCo Deploys AI-Driven Pricing and Promotion Optimization at Scale"*, *INFORMS Journal on Applied Analytics*.
 
 No formal license has been defined.

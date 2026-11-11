@@ -133,8 +133,8 @@ $$\text{such that}$$
 | :--- | :--- | :--- |
 | Single Price Choice | $\sum_k y_{i,k} = 1 \quad \forall i \in I_P$ | Exactly one shelf price option selected per SKU. |
 | Price Ladder | $\frac{p_{\text{large}}}{s_{\text{large}}} \le \frac{p_{\text{small}}}{s_{\text{small}}}$ | 170g family packs must maintain lower price-per-gram than 62g single-serve packs. |
-| Gross Margin Floor | $\sum_i \text{Profit}_i \ge \gamma_{\Pi} \sum_i \text{Rev}_i$ | Total portfolio gross profit margin must stay $\ge 20\%$. |
-| Revenue Floor | $\sum_i \text{Rev}_i \ge \gamma_R \cdot \text{Rev}_{\text{baseline}}$ | Total weekly revenue must stay $\ge 95\%$ of status quo baseline. |
+| Gross Margin Floor | &sum;<sub>i</sub> Profit<sub>i</sub> &ge; &gamma;<sub>&Pi;</sub> &middot; &sum;<sub>i</sub> Rev<sub>i</sub> | Total portfolio gross profit margin must stay $\ge 20\%$. |
+| Revenue Floor | &sum;<sub>i</sub> Rev<sub>i</sub> &ge; &gamma;<sub>R</sub> &middot; Rev<sub>baseline</sub> | Total weekly revenue must stay $\ge 95\%$ of status quo baseline. |
 | Avg Price Increase | $\frac{\sum_i p_i^0 \delta_i}{\sum_i p_i^0} \le \theta_{\max}$ | Weighted portfolio price increases capped at $+10\%$. |
 
 ---

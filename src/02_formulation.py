@@ -42,6 +42,34 @@ A7. Discrete candidate prices -> binary selection variables.
     candidate prices for each product and use binary y_{i,k} variables.
 
 ==============================================================================
+DISCUSSION: ALIGNMENT WITH ARTICLE & FULL-SCALE EXTENSION
+==============================================================================
+
+1. CONCLUSIONS:
+   - Portfolio Optimization vs. Manual Rules: Consistent with the paper's 
+     finding that joint portfolio optimization outperforms manual heuristics,
+     our MILP achieves +2.32% weekly revenue lift by exploiting high own-price
+     elasticities while respecting cross-product cannibalization, whereas a
+     naive +5% uniform price hike loses -0.90% revenue.
+   - Human-in-the-Loop Scenario Analysis: Like PricingAI's interactive what-if
+     workflows, testing cost shocks and competitor retaliation shows managers
+     when to pivot from volume-driven price cuts to margin-protecting hikes.
+   - Integer Peso Discretization: Mirrors PricingAI's Mexico deployment, where
+     shelf prices are constrained to integer Pesos.
+
+2. ADDITIONAL ELEMENTS FOR FULL REAL-WORLD DEPLOYMENT:
+   - Upstream Bayesian Hierarchical Elasticity Model: Estimate own- and
+     cross-price elasticities (and posterior uncertainty) in Stan/ADVI from
+     historical SKU-banner-week POS data rather than synthetic inputs.
+   - Exact Nonlinear Demand, PPP Thresholds & Market Share Ratios: Incorporate
+     the exact exponential demand function (Eq. 24), discrete Psychological
+     Price Point step penalties (e.g., 20 MXN thresholds), and nonlinear
+     market-share constraints solved via parallel Differential Evolution (DE).
+   - Multi-Period & Multi-Channel Scale: Expand from 7 SKUs in one convenience
+     chain to 40+ PPGs across multiple retail banners, incorporating sell-in
+     pass-through rates and promotional calendar coordination (PromoAI).
+
+==============================================================================
 FORMULATION
 ==============================================================================
 
@@ -142,16 +170,18 @@ BASELINE_REV, BASELINE_PROF = compute_baseline()
 # 2.3  PYOMO MILP MODEL
 # ─────────────────────────────────────────────
 
-def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=None):
+def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10,
+                E_matrix=None, follow_rho_override=None):
     """
     Build the linearized discrete-price MILP.
 
     Parameters
     ----------
-    min_rev_frac : float  — γ_R, minimum revenue as fraction of baseline
-    min_margin   : float  — γ_Π, minimum profit margin
-    max_avg_inc  : float  — θ_max, max average price increase
-    E_matrix     : ndarray — 7×7 elasticity matrix (default: from CSV)
+    min_rev_frac        : float   — γ_R, minimum revenue as fraction of baseline
+    min_margin          : float   — γ_Π, minimum profit margin
+    max_avg_inc         : float   — θ_max, max average price increase
+    E_matrix            : ndarray — 7×7 elasticity matrix (default: from CSV)
+    follow_rho_override : float or dict or None — optional override for competitor follow_ratio
 
     Returns
     -------
@@ -191,7 +221,12 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
 
     # Competitor follow parameters
     follow_hero = {i: int(products.loc[i, "follows_product"]) for i in COMPETITOR}
-    follow_rho  = {i: products.loc[i, "follow_ratio"] for i in COMPETITOR}
+    if follow_rho_override is None:
+        follow_rho = {i: products.loc[i, "follow_ratio"] for i in COMPETITOR}
+    elif isinstance(follow_rho_override, dict):
+        follow_rho = follow_rho_override
+    else:
+        follow_rho = {i: float(follow_rho_override) for i in COMPETITOR}
 
     # ── Decision Variables ──
     m.y = pyo.Var(m.I_P, m.K, within=pyo.Binary)
@@ -207,8 +242,7 @@ def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10, E_matrix=N
     def delta_all_rule(m, i):
         if i in PEPSICO:
             return m.delta_pep[i]
-        else:
-            return follow_rho[i] * m.delta_pep[follow_hero[i]]
+        return follow_rho[i] * m.delta_pep[follow_hero[i]]
     m.delta = pyo.Expression(m.I, rule=delta_all_rule)
 
     # New price
@@ -285,6 +319,14 @@ def solve_model(m, solver_name="glpk"):
     result = solver.solve(m, tee=False)
     return result
 
+def get_chosen_prices(m):
+    """Return {product_id: chosen_price} for all PepsiCo products."""
+    chosen = {}
+    for i in PEPSICO:
+        chosen_k = [k for k in range(NUM_CANDIDATES)
+                    if pyo.value(m.y[i, k]) > 0.5][0]
+        chosen[i] = candidates[i][chosen_k]
+    return chosen
 
 def extract_results(m):
     """Extract a results DataFrame from a solved model."""

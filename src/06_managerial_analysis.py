@@ -43,29 +43,112 @@ print("=" * 60)
 print("  STEP 6: MANAGERIAL ANALYSIS & BUSINESS INSIGHTS")
 print("=" * 60)
 
-# Summary Executive Table
-summary_data = {
-    "Pricing Strategy": [
-        "Status Quo Baseline",
-        "Naive Rule (+5% Uniform)",
-        "MILP Optimal (Base Case)",
-        "Inflation Scenario (+15% Cost)",
-        "Price War (100% Retaliation)"
-    ],
-    "Weekly Revenue (MXN)": ["$22,350.0", "$22,148.8", "$22,868.5", "$22,868.5", "$22,450.0"],
-    "Revenue Lift (%)": ["0.00%", "-0.90%", "+2.32%", "+2.32%", "+0.45%"],
-    "Gross Margin (%)": ["48.2%", "50.4%", "45.1%", "36.8%", "44.2%"],
-    "Key Decision Driver": [
-        "Historical prices",
-        "Manual percentage markup",
-        "Cross-elasticity portfolio alignment",
-        "Margin floor constraint binding",
-        "Own-price elasticity demand capture"
-    ]
-}
+# ------------------------------------------------------------------
+# 1. COMPUTE LIVE SCENARIOS FROM THE PYOMO MODEL
+# ------------------------------------------------------------------
 
-df_summary = pd.DataFrame(summary_data)
-print("\nExecutive Strategy Comparison Table:")
+# Scenario 0: Status Quo Baseline
+base_margin = BASELINE_PROF / BASELINE_REV * 100.0
+
+# Scenario 1: Naive +5% Uniform Markup
+delta_naive = {j: 0.05 if j in PEPSICO else 0.025 for j in ALL_PRODUCTS}
+naive_rev, naive_prof = 0.0, 0.0
+for i in PEPSICO:
+    V0 = products.loc[i, "baseline_volume_units_wk"]
+    p0 = products.loc[i, "current_price_mxn"]
+    s  = products.loc[i, "size_g"]
+    c  = products.loc[i, "unit_cost_mxn"]
+    e_sum = sum(E[i - 1, j - 1] * delta_naive[j] for j in ALL_PRODUCTS)
+    vol_i = V0 * (1 + e_sum)
+    rev_i = (V0 * p0 / s) * (1 + delta_naive[i] + e_sum)
+    naive_rev += rev_i
+    naive_prof += rev_i - c * (vol_i / s)
+
+# Scenario 2: MILP Optimal (Base Case: ρ = 0.50, min_margin = 20%)
+m_base = build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10)
+solve_model(m_base)
+opt_rev    = pyo.value(m_base.total_rev)
+opt_prof   = pyo.value(m_base.total_prof)
+opt_prices = get_chosen_prices(m_base)
+
+# Scenario 3: Moderate Cost Inflation (+15% Cost, margin floor still slack)
+m_inf15 = build_model(min_margin=0.20)
+for i in ALL_PRODUCTS:
+    m_inf15.c[i] = products.loc[i, "unit_cost_mxn"] * 1.15
+solve_model(m_inf15)
+inf15_rev  = pyo.value(m_inf15.total_rev)
+inf15_prof = pyo.value(m_inf15.total_prof)
+
+# Scenario 4: Severe Cost Inflation (+60% Cost, 20% margin floor binds!)
+m_inf60 = build_model(min_margin=0.20)
+for i in ALL_PRODUCTS:
+    m_inf60.c[i] = products.loc[i, "unit_cost_mxn"] * 1.60
+solve_model(m_inf60)
+inf60_rev    = pyo.value(m_inf60.total_rev)
+inf60_prof   = pyo.value(m_inf60.total_prof)
+inf60_prices = get_chosen_prices(m_inf60)
+
+# Scenario 5: Full Competitor Price War (ρ = 1.00)
+m_war = build_model(min_margin=0.20, follow_rho_override=1.00)
+solve_model(m_war)
+war_rev    = pyo.value(m_war.total_rev)
+war_prof   = pyo.value(m_war.total_prof)
+war_prices = get_chosen_prices(m_war)
+
+# Build Executive Strategy Comparison Table from live values
+summary_rows = [
+    {
+        "Pricing Strategy": "Status Quo Baseline",
+        "Prices (MXN)": str([int(products.loc[i, "current_price_mxn"]) for i in PEPSICO]),
+        "Weekly Rev": f"${BASELINE_REV:,.2f}",
+        "Rev Lift": "0.00%",
+        "Gross Margin": f"{base_margin:.2f}%",
+        "Active / Binding Driver": "Historical shelf prices",
+    },
+    {
+        "Pricing Strategy": "Naive Rule (+5% Uniform)",
+        "Prices (MXN)": "Continuous +5%",
+        "Weekly Rev": f"${naive_rev:,.2f}",
+        "Rev Lift": f"{(naive_rev/BASELINE_REV - 1)*100:+.2f}%",
+        "Gross Margin": f"{naive_prof/naive_rev*100:.2f}%",
+        "Active / Binding Driver": "Uninformed markup destroys volume",
+    },
+    {
+        "Pricing Strategy": "MILP Optimal (Base Case)",
+        "Prices (MXN)": str(list(opt_prices.values())),
+        "Weekly Rev": f"${opt_rev:,.2f}",
+        "Rev Lift": f"{(opt_rev/BASELINE_REV - 1)*100:+.2f}%",
+        "Gross Margin": f"{opt_prof/opt_rev*100:.2f}%",
+        "Active / Binding Driver": "-2 MXN lower price bounds tight",
+    },
+    {
+        "Pricing Strategy": "Cost Squeeze (+15% Cost)",
+        "Prices (MXN)": str(list(opt_prices.values())),
+        "Weekly Rev": f"${inf15_rev:,.2f}",
+        "Rev Lift": f"{(inf15_rev/BASELINE_REV - 1)*100:+.2f}%",
+        "Gross Margin": f"{inf15_prof/inf15_rev*100:.2f}%",
+        "Active / Binding Driver": "Margin floor (20%) still slack",
+    },
+    {
+        "Pricing Strategy": "Severe Cost Squeeze (+60%)",
+        "Prices (MXN)": str(list(inf60_prices.values())),
+        "Weekly Rev": f"${inf60_rev:,.2f}",
+        "Rev Lift": f"{(inf60_rev/BASELINE_REV - 1)*100:+.2f}%",
+        "Gross Margin": f"{inf60_prof/inf60_rev*100:.2f}%",
+        "Active / Binding Driver": "20% margin floor binds (Doritos 170g -> 24)",
+    },
+    {
+        "Pricing Strategy": "Price War (100% Retaliation)",
+        "Prices (MXN)": str(list(war_prices.values())),
+        "Weekly Rev": f"${war_rev:,.2f}",
+        "Rev Lift": f"{(war_rev/BASELINE_REV - 1)*100:+.2f}%",
+        "Gross Margin": f"{war_prof/war_rev*100:.2f}%",
+        "Active / Binding Driver": "Lays 170g pivots to 24 MXN to deter match",
+    },
+]
+
+df_summary = pd.DataFrame(summary_rows)
+print("\nExecutive Strategy Comparison Table (Computed Dynamically):")
 print(df_summary.to_string(index=False))
 
 print("\n" + "=" * 60)
@@ -73,24 +156,37 @@ print("  KEY MANAGERIAL TAKEAWAYS & OPERATIONAL INSIGHTS")
 print("=" * 60)
 
 takeaways = """
-1. WHY THE OPTIMIZER RECOMMENDS PRICE CUTS (-2 MXN):
-   - High own-price elasticities (between -1.45 and -1.80) mean snack demand in 
-     Mexican convenience stores is highly price-sensitive.
-   - The volume expansion (+8.9% to +17.5%) more than offsets lower unit price,
-     generating +2.32% portfolio revenue lift (+518.5 MXN/week).
+1. WHY THE OPTIMIZER RECOMMENDS TARGETED PRICE CUTS (-2 MXN):
+   - Own-price elasticities (-1.40 to -1.80) exceed unit elasticity (-1.0), meaning
+     convenience-store snack buyers are highly price-elastic.
+   - Cutting prices by 2 MXN across the portfolio expands unit demand enough to lift
+     weekly revenue by +2.32% (${BASELINE_REV:,.2f} -> ${opt_rev:,.2f} MXN/wk),
+     while trading off gross margin from {base_margin:.2f}% to {opt_prof/opt_rev*100:.2f}%.
 
-2. WHY MANUAL / NAIVE RULES FAIL (-0.90% LOSS):
-   - Uniform +5% price increases destroy volume across all SKUs, leading to net revenue 
-     loss (-0.90%). Single-SKU or rule-of-thumb pricing ignores demand destruction.
+2. WHY MANUAL / NAIVE MARKUPS FAIL (-0.90% REVENUE LOSS):
+   - Applying a uniform +5% price hike across all SKUs ignores cross-price
+     substitution toward Barcel and triggers severe volume loss, shrinking weekly
+     revenue to ${naive_rev:,.2f} MXN/wk (-0.90%).
 
-3. INFLUENCE OF OPERATIONAL CONSTRAINTS:
-   - Price Ladder Rules: Prevent cannibalization by keeping 170g packs cheaper per 
-     gram than 62g packs.
-   - Margin Floor Constraint (γ_Π ≥ 20%): Acts as a safety net under cost inflation 
-     (+15% to +30%), preventing unprofitable volume chasing.
+3. BINDING BOUNDS & CONSTRAINT REGIME SHIFTS:
+   - In the base case, the -2 MXN discrete candidate bounds are the active bottleneck:
+     the optimizer captures every available peso of downward price flexibility while
+     the 20% gross margin floor (49.80% achieved) and price ladders remain slack.
+   - Under severe cost inflation (+60%), the 20% margin floor becomes binding and
+     forces the model to raise Doritos Nacho 170g from 22 to 24 MXN to protect margin.
 
-4. RESILIENCE UNDER PRICE WARS:
-   - Even if competitors match 100% of price cuts, PepsiCo retains a +0.45% revenue lift 
-     due to strong own-price elasticity demand expansion.
+4. STRATEGIC PIVOT UNDER COMPETITOR RETALIATION (PRICE WARS):
+   - When Barcel matches <= 50% of PepsiCo's price changes, cutting all 5 SKUs is
+     optimal. However, when Barcel retaliates aggressively (75%-100% price match),
+     the MILP pivots Lays Classic 170g (Barcel's hero reference SKU) from 20 to
+     24 MXN—pulling Barcel's price upward and preserving a +1.58% revenue gain.
+
+CONCLUDING SUMMARY:
+   Formulating PepsiCo Mexico's discrete shelf-pricing problem as a linearized MILP
+   translates complex cross-price elasticities and retail price-ladder rules into
+   provably optimal, transparent decisions. Compared to status-quo or uniform markup
+   rules, the model unlocks +2.32% weekly revenue growth in normal market conditions
+   and automatically adapts pricing levers when severe cost inflation or aggressive
+   competitor price-matching threatens profitability.
 """
 print(takeaways)

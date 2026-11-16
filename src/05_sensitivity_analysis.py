@@ -33,6 +33,7 @@ ALL_PRODUCTS = step2.ALL_PRODUCTS
 BASELINE_REV = step2.BASELINE_REV
 build_model  = step2.build_model
 solve_model  = step2.solve_model
+get_chosen_prices = step2.get_chosen_prices
 
 print("=" * 60)
 print("  STEP 5: SENSITIVITY & WHAT-IF PARAMETER ANALYSIS")
@@ -62,25 +63,23 @@ for cm in cost_multipliers:
 # ==============================================================
 # EXPERIMENT B: COMPETITOR PRICE RETALIATION
 # ==============================================================
-print("\n[Experiment B] Testing Competitor Price Match Retaliation...")
+print("\n[Experiment B] Testing Competitor Price Match Retaliation (0% to 100%)...")
 retaliation_ratios = [0.0, 0.25, 0.50, 0.75, 1.00]
 rev_lifts_comp = []
+comp_margins = []
 
 for rho in retaliation_ratios:
-    # Update competitor follow ratios
-    E_mod = E.copy()
-    m = build_model(min_margin=0.20, E_matrix=E_mod)
-    # Adjust competitor response in delta expression
-    for c_id in step2.COMPETITOR:
-        hero_id = int(products.loc[c_id, "follows_product"])
-        # Re-solve with updated follow ratio
-    solve_model(m)
+    m = build_model(min_margin=0.20, follow_rho_override=rho)
+    res = solve_model(m)
     r = pyo.value(m.total_rev)
-    # Under retaliation, competitor cuts prices by rho * PepsiCo cuts
-    # Calculate effective revenue lift
-    comp_lift = ((r - BASELINE_REV) / BASELINE_REV) * 100.0 * (1.0 - 0.7 * rho)
-    rev_lifts_comp.append(comp_lift)
-    print(f"  Retaliation {rho*100:5.1f}% | Revenue Lift: {comp_lift:+.2f}%")
+    p = pyo.value(m.total_prof)
+    lift = ((r - BASELINE_REV) / BASELINE_REV) * 100.0
+    marg = (p / r) * 100.0
+    prices = get_chosen_prices(m)
+    rev_lifts_comp.append(lift)
+    comp_margins.append(marg)
+    print(f"  Retaliation {rho*100:5.1f}% | Rev: ${r:6.2f} | Lift: {lift:+.2f}% | "
+          f"Margin: {marg:5.2f}% | Prices: {list(prices.values())}")
 
 # ==============================================================
 # EXPERIMENT C: MARGIN FLOOR SENSITIVITY

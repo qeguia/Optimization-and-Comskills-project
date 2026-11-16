@@ -48,17 +48,25 @@ rev_lifts_cost = []
 margin_percents = []
 
 for cm in cost_multipliers:
-    # Build model with inflated costs
     m = build_model(min_margin=0.20)
     for i in ALL_PRODUCTS:
         m.c[i] = products.loc[i, "unit_cost_mxn"] * cm
-    
-    solve_model(m)
-    r = pyo.value(m.total_rev)
-    p = pyo.value(m.total_prof)
-    rev_lifts_cost.append(((r - BASELINE_REV) / BASELINE_REV) * 100.0)
-    margin_percents.append((p / r) * 100.0)
-    print(f"  Cost +{(cm-1)*100:4.1f}% | Revenue: ${r:,.1f} MXN | Uplift: {rev_lifts_cost[-1]:+.2f}% | Margin: {margin_percents[-1]:.1f}%")
+
+    res = solve_model(m)
+    if res.solver.termination_condition == pyo.TerminationCondition.optimal:
+        r = pyo.value(m.total_rev)
+        p = pyo.value(m.total_prof)
+        lift = ((r - BASELINE_REV) / BASELINE_REV) * 100.0
+        marg = (p / r) * 100.0
+        prices = get_chosen_prices(m)
+        rev_lifts_cost.append(lift)
+        margin_percents.append(marg)
+        print(f"  Cost +{(cm-1)*100:4.0f}% | Rev: ${r:6.2f} | Lift: {lift:+.2f}% | "
+              f"Margin: {marg:5.2f}% | Prices: {list(prices.values())}")
+    else:
+        rev_lifts_cost.append(np.nan)
+        margin_percents.append(np.nan)
+        print(f"  Cost +{(cm-1)*100:4.0f}% | Status: Infeasible (20% margin floor violated)")
 
 # ==============================================================
 # EXPERIMENT B: COMPETITOR PRICE RETALIATION
@@ -89,16 +97,19 @@ margin_floors = [0.15, 0.20, 0.25, 0.30, 0.35]
 rev_lifts_margin = []
 
 for mf in margin_floors:
-    try:
-        m = build_model(min_margin=mf)
-        res = solve_model(m)
+    m = build_model(min_margin=mf)
+    res = solve_model(m)
+    if res.solver.termination_condition == pyo.TerminationCondition.optimal:
         r = pyo.value(m.total_rev)
-        rev_lifts_margin.append(((r - BASELINE_REV) / BASELINE_REV) * 100.0)
-        status = "Feasible"
-    except Exception:
+        p = pyo.value(m.total_prof)
+        lift = ((r - BASELINE_REV) / BASELINE_REV) * 100.0
+        prices = get_chosen_prices(m)
+        rev_lifts_margin.append(lift)
+        print(f"  Margin Floor {mf*100:4.0f}% | Lift: {lift:+.2f}% | "
+              f"Achieved Margin: {p/r*100:5.2f}% | Prices: {list(prices.values())}")
+    else:
         rev_lifts_margin.append(np.nan)
-        status = "Infeasible (Floor too high)"
-    print(f"  Margin Floor {mf*100:4.1f}% | Revenue Lift: {rev_lifts_margin[-1]} | Status: {status}")
+        print(f"  Margin Floor {mf*100:4.0f}% | Status: Infeasible (Floor exceeds max achievable margin)")
 
 # ==============================================================
 # GENERATE SENSITIVITY PLOTS

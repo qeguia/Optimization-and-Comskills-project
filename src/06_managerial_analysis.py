@@ -9,15 +9,35 @@ Optimization at Scale", INFORMS Journal on Applied Analytics.
 
 ==============================================================================
 This script:
-  1. Computes decision trade-offs and constraint influence
-  2. Generates an executive trade-off matrix comparing pricing policies
-  3. Outputs managerial insights aligned with INFORMS submission standards
+  1. Dynamically solves key strategic scenarios via 02_formulation.py
+  2. Diagnoses binding vs. non-binding constraints and scarce resources
+  3. Generates an executive trade-off matrix comparing pricing policies
+  4. Outputs managerial insights aligned with INFORMS submission standards
 
 ==============================================================================
 """
 
+import os
 import pandas as pd
-import numpy as np
+import pyomo.environ as pyo
+from importlib.machinery import SourceFileLoader
+
+step2 = SourceFileLoader(
+    "step2",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "02_formulation.py")
+).load_module()
+
+products          = step2.products
+E                 = step2.E
+candidates        = step2.candidates
+PEPSICO           = step2.PEPSICO
+ALL_PRODUCTS      = step2.ALL_PRODUCTS
+LADDER_PAIRS      = step2.LADDER_PAIRS
+BASELINE_REV      = step2.BASELINE_REV
+BASELINE_PROF     = step2.BASELINE_PROF
+build_model       = step2.build_model
+solve_model       = step2.solve_model
+get_chosen_prices = step2.get_chosen_prices
 
 print("=" * 60)
 print("  STEP 6: MANAGERIAL ANALYSIS & BUSINESS INSIGHTS")

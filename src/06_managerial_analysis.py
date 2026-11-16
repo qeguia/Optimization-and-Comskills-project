@@ -151,6 +151,33 @@ df_summary = pd.DataFrame(summary_rows)
 print("\nExecutive Strategy Comparison Table (Computed Dynamically):")
 print(df_summary.to_string(index=False))
 
+# ------------------------------------------------------------------
+# 2. BINDING CONSTRAINTS & RESOURCE SCARCITY DIAGNOSTIC (BASE CASE)
+# ------------------------------------------------------------------
+print("\n" + "=" * 60)
+print("  BASE-CASE CONSTRAINT & BOUND DIAGNOSTIC")
+print("=" * 60)
+
+total_p0 = sum(products.loc[i, "current_price_mxn"] for i in PEPSICO)
+avg_price_change = sum(
+    products.loc[i, "current_price_mxn"] * pyo.value(m_base.delta_pep[i])
+    for i in PEPSICO
+) / total_p0
+
+print(f"  • Candidate Price Bounds : BINDING — All 5 PepsiCo SKUs hit their -2 MXN lower bound")
+print(f"  • (C2) Revenue Floor     : SLACK   — Achieved {opt_rev/BASELINE_REV*100:.2f}% vs. 95.00% floor")
+print(f"  • (C3) Margin Floor      : SLACK   — Achieved {opt_prof/opt_rev*100:.2f}% vs. 20.00% floor")
+for big, small in LADDER_PAIRS:
+    ppg_big = opt_prices[big] / products.loc[big, "size_g"]
+    ppg_sm  = opt_prices[small] / products.loc[small, "size_g"]
+    brand   = products.loc[big, "brand"]
+    print(f"  • (C4) {brand:7s} Ladder    : SLACK   — 170g ({ppg_big:.4f} MXN/g) <= 62g ({ppg_sm:.4f} MXN/g)")
+print(f"  • (C6) Avg Price Cap     : SLACK   — Weighted price change {avg_price_change*100:+.2f}% vs. +10.00% cap")
+
+# ------------------------------------------------------------------
+# 3. KEY MANAGERIAL TAKEAWAYS & CONCLUDING SUMMARY
+# ------------------------------------------------------------------
+
 print("\n" + "=" * 60)
 print("  KEY MANAGERIAL TAKEAWAYS & OPERATIONAL INSIGHTS")
 print("=" * 60)

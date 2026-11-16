@@ -72,7 +72,7 @@ python 03_small_use_case.py
 #### 4. Realistic Use Case & Pyomo Solver Execution (Step 4)
 Solves the convenience store portfolio model and compares MILP optimal strategy against status quo and naive rules:
 ```bash
-python 04_realistic_use_case.py
+python 04_solver_and_plots.py
 ```
 
 #### 5. Managerial What-If Sensitivity Analysis (Step 5)
@@ -152,7 +152,7 @@ Optimization-and-Comskills-project/
 │   ├── 01_motivation_and_data.py   # Step 1: Data setup & baseline KPIs
 │   ├── 02_formulation.py            # Step 2: Pyomo MILP builder & solver wrapper
 │   ├── 03_small_use_case.py        # Step 3: Validation, Taylor error & sanity checks
-│   ├── 04_realistic_use_case.py    # Step 4: Pyomo solver & benchmark comparison
+│   ├── 04_solver_and_plots.py    # Step 4: Pyomo solver & benchmark comparison
 │   ├── 05_sensitivity_analysis.py # Step 5: Cost, retaliation & margin What-Ifs
 │   └── 06_managerial_analysis.py   # Step 6: Executive synthesis & trade-off matrix
 │

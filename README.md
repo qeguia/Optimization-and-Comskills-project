@@ -10,10 +10,10 @@ This project applies Mixed-Integer Linear Programming (MILP) to solve base prici
 The project adapts the non-linear demand model presented in Llenas et al. (2026) (*"PepsiCo Deploys AI-Driven Pricing and Promotion Optimization at Scale"*, INFORMS Journal on Applied Analytics) by linearizing the volume response function using a first-order Taylor series expansion.
 
 The project integrates:
-- Data Engineering & Setup: Processing synthetic convenience store data for 7 SKUs (5 PepsiCo + 2 Competitors), discrete Peso price points, and a 7×7 cross-price elasticity matrix.
-- MILP Pyomo Formulation: Discrete binary decision choices ($y_{i,k} \in \{0,1\}$), volume linearization, price-ladder rules, margin protection bounds, and revenue floors.
-- Solver Execution & Performance Analysis: Solving the base case to provable global optimality.
-- Sensitivity & What-If Parameter Analysis: Testing cost inflation squeezes, competitor price wars, and margin floor rigidity.
+- Processing synthetic convenience store data for 7 SKUs (5 PepsiCo + 2 Competitors), discrete Peso price points, and a 7×7 cross-price elasticity matrix.
+- Discrete binary decision choices ($y_{i,k} \in \{0,1\}$), volume linearization, price-ladder rules, margin protection bounds, and revenue floors.
+- Solving the base case to provable global optimality.
+- Testing cost inflation squeezes, competitor price wars, and margin floor rigidity.
 
 ---
 
@@ -48,7 +48,7 @@ This project uses a modular `src/`-based structure. To ensure imports work corre
 cd src
 ```
 
-### Running the End-to-End Pipeline
+### Running the project
 Execute the pipeline step-by-step:
 
 #### 1. Motivation & Data Inspection (Step 1)
@@ -144,21 +144,20 @@ $$\text{such that}$$
 ```
 Optimization-and-Comskills-project/
 ├── data/
-│   ├── candidate_prices.csv        # 5 discrete integer Peso options per SKU
-│   ├── elasticity_matrix.csv       # 7x7 cross-price elasticity matrix
-│   └── products.csv                # SKU catalog, base prices, costs, baseline volumes
+│   ├── candidate_prices.csv         # 5 discrete integer Peso options per SKU
+│   ├── elasticity_matrix.csv        # 7x7 cross-price elasticity matrix
+│   └── products.csv                 # SKU catalog, base prices, costs, baseline volumes
 │
 ├── src/
-│   ├── 01_motivation_and_data.py   # Step 1: Data setup & baseline KPIs
+│   ├── 01_motivation_and_data.py    # Step 1: Data setup & baseline KPIs
 │   ├── 02_formulation.py            # Step 2: Pyomo MILP builder & solver wrapper
-│   ├── 03_small_use_case.py        # Step 3: Validation, Taylor error & sanity checks
-│   ├── 04_solver_and_plots.py    # Step 4: Pyomo solver & benchmark comparison
-│   ├── 05_sensitivity_analysis.py # Step 5: Cost, retaliation & margin What-Ifs
-│   └── 06_managerial_analysis.py   # Step 6: Executive synthesis & trade-off matrix
+│   ├── 03_small_use_case.py         # Step 3: Validation, Taylor error & sanity checks
+│   ├── 04_solver_and_plots.py       # Step 4: Pyomo solver & benchmark comparison
+│   ├── 05_sensitivity_analysis.py   # Step 5: Cost, retaliation & margin What-Ifs
+│   └── 06_managerial_analysis.py    # Step 6: Executive synthesis & trade-off matrix
 │
-├── pepsico_pricing_poster.html     # Single-page A4 Landscape Academic Poster
-├── environment.yml                 # Conda dependencies specification
-└── README.md                       # Project documentation
+├── environment.yml                  # Conda dependencies specification
+└── README.md                        # Project documentation
 ```
 
 ---
@@ -176,7 +175,7 @@ Optimization-and-Comskills-project/
 
 ## License, Academic Context & Reference
 
-* This project is intended for academic use within: Optimization I & Communication Skills
+* This project is intended for academic use in: Optimization I & Communication Skills
 * Team: Matisse Aaftink-De Luca · Fernando Cordero · Qin Eguía · Tamara Shopova
 * Reference Article: Llenas et al. (2026) *"PepsiCo Deploys AI-Driven Pricing and Promotion Optimization at Scale"*, *INFORMS Journal on Applied Analytics*.
 

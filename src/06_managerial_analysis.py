@@ -9,9 +9,9 @@ Optimization at Scale", INFORMS Journal on Applied Analytics.
 
 ==============================================================================
 This script:
-  1. Dynamically solves key strategic scenarios via 02_formulation.py
-  2. Diagnoses binding vs. non-binding constraints and scarce resources
-  3. Generates an executive trade-off matrix comparing pricing policies
+  1. Evaluates six live pricing scenarios
+  2. Generates an executive strategy comparison table
+  3. Diagnoses binding vs. slack constraints
   4. Outputs managerial insights aligned with INFORMS submission standards
 
 ==============================================================================
@@ -98,7 +98,7 @@ war_prices = get_chosen_prices(m_war)
 # Build Executive Strategy Comparison Table from live values
 summary_rows = [
     {
-        "Pricing Strategy": "Status Quo Baseline",
+        "Pricing Strategy": "Baseline",
         "Prices (MXN)": str([int(products.loc[i, "current_price_mxn"]) for i in PEPSICO]),
         "Weekly Rev": f"${BASELINE_REV:,.2f}",
         "Rev Lift": "0.00%",

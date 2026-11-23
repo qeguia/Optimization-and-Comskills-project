@@ -11,9 +11,11 @@ Optimization at Scale", INFORMS Journal on Applied Analytics.
 ASSUMPTIONS & SIMPLIFICATIONS
 ==============================================================================
 
-A1. Small portfolio: 5 PepsiCo products + 2 competitor products (article handles 40+ products across multiple retailers).
+A1. Small portfolio: 5 PepsiCo products + 2 competitor products (article
+    handles 40+ product promotion groups across multiple retailers).
 
-A2. Single retailer, single period; no multi-period dynamics. (article considers semi-annual/annual planning horizons).
+A2. Single representative store, single planning period; no multi-period
+    dynamics (article considers semi-annual/annual planning horizons).
 
 A3. Linearization of the volume model.
     The paper uses:
@@ -23,51 +25,25 @@ A3. Linearization of the volume model.
     a first-order Taylor expansion gives:
         V_i ≈ V0_i · (1 + Σ_j E_ij · δ_j)
 
-    This is linear in the δ variables. Valid when |δ| ≤ ~10-15%.
+    This is linear in the δ (and binary y) variables. Valid when |δ| ≤ ~15%.
 
-A4. Revenue simplification.
-    Rev_i = (V_i / s_i) · p_i
-    Substituting linearized volume:
-        Rev_i ≈ (V0_i · p0_i / s_i) · (1 + δ_i + Σ_j E_ij · δ_j)
-    We drop the second-order cross-term δ_i · (Σ E_ij δ_j), which is negligible for small price changes. Result: linear in δ.
+A4. Exact discrete price-volume product via McCormick envelopes.
+    Substituting p_i = Σ_k pk_{i,k} y_{i,k} and linearized volume V_i(y)
+    into Rev_i = p_i · V_i produces binary products w_{i,k,j,l} = y_{i,k} · y_{j,l}
+    (for i < j), which are linearized exactly via McCormick inequalities:
+        w ≤ y_{i,k},   w ≤ y_{j,l},   w ≥ y_{i,k} + y_{j,l} - 1
+    This removes second-order Taylor revenue approximation error.
 
 A5. Competitor prices follow PepsiCo "hero" products proportionally:
-        δ_competitor = ρ · δ_hero     (ρ = 0.5 in our data)
+        δ_competitor = ρ · δ_hero     (ρ = 0.50 in our base data)
     Same mechanism as in paper (Eq. 20).
 
-A6. Psychological price points (PPP) omitted for simplicity. (the paper includes step-function PPP effects)
+A6. Psychological price points (PPP) omitted for simplicity (the paper
+    includes step-function PPP effects).
 
 A7. Discrete candidate prices -> binary selection variables.
-    Since Mexican prices are integer Pesos, we define a finite set of
+    Since Mexican shelf prices are integer Pesos, we define a finite set of
     candidate prices for each product and use binary y_{i,k} variables.
-
-==============================================================================
-DISCUSSION: ALIGNMENT WITH ARTICLE & FULL-SCALE EXTENSION
-==============================================================================
-
-1. CONCLUSIONS:
-   - Portfolio Optimization vs. Manual Rules: Consistent with the paper's 
-     finding that joint portfolio optimization outperforms manual heuristics,
-     our MILP achieves +2.32% weekly revenue lift by exploiting high own-price
-     elasticities while respecting cross-product cannibalization, whereas a
-     naive +5% uniform price hike loses -0.90% revenue.
-   - Human-in-the-Loop Scenario Analysis: Like PricingAI's interactive what-if
-     workflows, testing cost shocks and competitor retaliation shows managers
-     when to pivot from volume-driven price cuts to margin-protecting hikes.
-   - Integer Peso Discretization: Mirrors PricingAI's Mexico deployment, where
-     shelf prices are constrained to integer Pesos.
-
-2. ADDITIONAL ELEMENTS FOR FULL REAL-WORLD DEPLOYMENT:
-   - Upstream Bayesian Hierarchical Elasticity Model: Estimate own- and
-     cross-price elasticities (and posterior uncertainty) in Stan/ADVI from
-     historical SKU-banner-week POS data rather than synthetic inputs.
-   - Exact Nonlinear Demand, PPP Thresholds & Market Share Ratios: Incorporate
-     the exact exponential demand function (Eq. 24), discrete Psychological
-     Price Point step penalties (e.g., 20 MXN thresholds), and nonlinear
-     market-share constraints solved via parallel Differential Evolution (DE).
-   - Multi-Period & Multi-Channel Scale: Expand from 7 SKUs in one convenience
-     chain to 40+ PPGs across multiple retail banners, incorporating sell-in
-     pass-through rates and promotional calendar coordination (PromoAI).
 
 ==============================================================================
 FORMULATION
@@ -80,51 +56,49 @@ FORMULATION
   K_i     = {0,...,4}     candidate price indices for product i ∈ I_P
 
 --- Parameters ---
-  p0_i     : current baseline shelf price [MXN]
-  V0_i     : baseline weekly sales volume [units]
+  p0_i     : current baseline shelf price [MXN/pack]
+  V0_i     : baseline weekly sales volume [packs/week]
   s_i      : pack size [grams]
-  c_i      : unit cost [MXN/unit]
+  c_i      : unit cost [MXN/pack]
   E_ij     : cross-price elasticity (entry i,j of matrix E)
-  pk_{i,k} : k-th candidate price for product i [MXN]
+  pk_{i,k} : k-th candidate price for product i [MXN/pack]
   ρ_i      : competitor follow ratio (for i ∈ I_C)
   h(i)     : PepsiCo hero product that competitor i follows
-  γ_R      : minimum revenue as fraction of baseline
-  γ_Π      : minimum profit margin (fraction of revenue)
-  θ_max    : maximum average price increase (fraction)
+  γ_R      : minimum revenue as fraction of baseline (0.95)
+  γ_Π      : minimum profit margin as fraction of revenue (0.20)
+  θ_max    : maximum weighted average price increase (0.10)
 
 --- Decision Variables ---
-  y_{i,k} ∈ {0,1}   1 if candidate price k is selected for product i
+  y_{i,k} ∈ {0,1}         1 if candidate price k is selected for product i ∈ I_P
+  w_{i,k,j,l} ∈ [0,1]     McCormick auxiliary variable for y_{i,k} · y_{j,l} (i < j)
 
---- Derived Variables (all linear in y) ---
-  δ_i = Σ_k [(pk_{i,k} - p0_i) / p0_i] · y_{i,k}        for i ∈ I_P
-  δ_i = ρ_i · δ_{h(i)}                                  for i ∈ I_C
-  V_i = V0_i · (1 + Σ_j E_ij · δ_j)                     predicted volume
-  Rev_i = (V0_i · p0_i / s_i) · (1 + δ_i + Σ_j E_ij · δ_j)
-  Profit_i = Rev_i - c_i · V_i / s_i
+--- Derived Expressions ---
+  p_i      = Σ_k pk_{i,k} · y_{i,k}                           for i ∈ I_P
+  δ_i      = Σ_k [(pk_{i,k} - p0_i) / p0_i] · y_{i,k}         for i ∈ I_P
+  δ_i      = ρ_i · δ_{h(i)}                                   for i ∈ I_C
+  V_i      = V0_i · (1 + Σ_{j ∈ I} E_ij · δ_j)                predicted volume [packs/wk]
+  Rev_i    = p_i · V_i  (exact via McCormick w_{i,k,j,l})     weekly revenue [MXN/wk]
+  Profit_i = Rev_i - c_i · V_i                                weekly gross profit [MXN/wk]
 
 --- Objective ---
-  max  Σ_{i ∈ I_P}  Rev_i       (maximize total PepsiCo revenue)
+  max  Σ_{i ∈ I_P} Profit_i     (maximize total PepsiCo weekly gross profit)
 
 --- Constraints ---
-  (C1) Selection: Σ_k y_{i,k} = 1 ∀ i ∈ I_P -> Exactly one price per product
-
-  (C2) Revenue floor: Σ_i Rev_i ≥ γ_R · Rev_baseline -> Total revenue stays above 95% of current
-
-  (C3) Margin floor: Σ_i Profit_i ≥ γ_Π · Σ_i Rev_i -> Aggregate profit margin ≥ 20%
-
-  (C4) Price ladder: p_new_large / s_large ≤ p_new_small / s_small -> Larger bags have lower price-per-gram (within same brand)
-
-  (C5) Non-neg volume: V_i ≥ 0 ∀ i -> Predicted volumes must be non-negative
-
-  (C6) Avg increase: Σ_i(p0_i · δ_i) / Σ_i(p0_i) ≤ θ_max -> Average weighted price increase ≤ 10%
+  (C1) Selection      : Σ_k y_{i,k} = 1 ∀ i ∈ I_P -> Exactly one price per SKU
+  (C2) Revenue floor  : Σ_{i ∈ I_P} Rev_i ≥ γ_R · Rev_baseline -> Revenue ≥ 95% of baseline
+  (C3) Margin floor   : Σ_{i ∈ I_P} Profit_i ≥ γ_Π · Σ_{i ∈ I_P} Rev_i -> Gross margin ≥ 20%
+  (C4) Price ladder   : p_large / s_large ≤ p_small / s_small -> Lower price/gram on 170g vs 62g
+  (C5) Non-neg volume : V_i ≥ 0 ∀ i ∈ I_P -> Non-negative PepsiCo predicted volumes
+  (C6) Avg price cap  : Σ_{i ∈ I_P}(p0_i · δ_i) / Σ_{i ∈ I_P}(p0_i) ≤ θ_max -> Avg price change ≤ +10%
+  (C7) McCormick env. : w ≤ y_{i,k}, w ≤ y_{j,l}, w ≥ y_{i,k} + y_{j,l} - 1 ∀ (i,k,j,l), i < j
 
 ==============================================================================
 """
 
+import os
 import pandas as pd
 import numpy as np
 import pyomo.environ as pyo
-import os
 
 # ─────────────────────────────────────────────
 # 2.1  LOAD DATA
@@ -132,7 +106,7 @@ import os
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
-products = pd.read_csv(os.path.join(DATA_DIR, "products.csv")).set_index("id")
+products       = pd.read_csv(os.path.join(DATA_DIR, "products.csv")).set_index("id")
 elasticity_raw = pd.read_csv(os.path.join(DATA_DIR, "elasticity_matrix.csv"))
 candidates_raw = pd.read_csv(os.path.join(DATA_DIR, "candidate_prices.csv"))
 
@@ -142,10 +116,10 @@ candidates = {}
 for pid, group in candidates_raw.groupby("product_id"):
     candidates[pid] = sorted(group["price_option"].tolist())
 
-PEPSICO = products[products["is_pepsico"] == 1].index.tolist()
-COMPETITOR = products[products["is_pepsico"] == 0].index.tolist()
+PEPSICO      = products[products["is_pepsico"] == 1].index.tolist()
+COMPETITOR   = products[products["is_pepsico"] == 0].index.tolist()
 ALL_PRODUCTS = list(products.index)
-NUM_CANDIDATES = 5
+NUM_CANDIDATES = len(candidates[PEPSICO[0]])
 
 # Price-ladder pairs: (large_product, small_product) within same brand
 LADDER_PAIRS = [(1, 2), (3, 4)]  # Lays 170g/62g, Doritos 170g/62g
@@ -158,10 +132,10 @@ def compute_baseline():
     rev, prof = 0.0, 0.0
     for i in PEPSICO:
         p = products.loc[i]
-        units = p["baseline_volume_units_wk"] / p["size_g"]
-        r = units * p["current_price_mxn"]
+        v0 = float(p["baseline_volume_units_wk"])
+        r = p["current_price_mxn"] * v0
         rev += r
-        prof += r - p["unit_cost_mxn"] * units
+        prof += (p["current_price_mxn"] - p["unit_cost_mxn"]) * v0
     return rev, prof
 
 BASELINE_REV, BASELINE_PROF = compute_baseline()
@@ -170,185 +144,170 @@ BASELINE_REV, BASELINE_PROF = compute_baseline()
 # 2.3  PYOMO MILP MODEL
 # ─────────────────────────────────────────────
 
-def build_model(min_rev_frac=0.95, min_margin=0.20, max_avg_inc=0.10,
-                E_matrix=None, follow_rho_override=None):
+def build_model(
+    min_rev_frac=0.95,
+    min_margin=0.20,
+    max_avg_inc=0.10,
+    E_matrix=None,
+    cand_dict=None,
+    follow_rho_override=None,
+):
     """
-    Build the linearized discrete-price MILP.
-
-    Parameters
-    ----------
-    min_rev_frac        : float   — γ_R, minimum revenue as fraction of baseline
-    min_margin          : float   — γ_Π, minimum profit margin
-    max_avg_inc         : float   — θ_max, max average price increase
-    E_matrix            : ndarray — 7×7 elasticity matrix (default: from CSV)
-    follow_rho_override : float or dict or None — optional override for competitor follow_ratio
-
-    Returns
-    -------
-    Pyomo ConcreteModel.
+    Build the profit-maximizing discrete-price MILP with linearized volume V_i(y)
+    and exact McCormick linearization of p_i * V_i = sum_{k,j,l} coeff * y_{i,k} * y_{j,l}.
     """
     if E_matrix is None:
         E_matrix = E
+    if cand_dict is None:
+        cand_dict = candidates
 
-    m = pyo.ConcreteModel("PepsiCo_Pricing_MILP")
+    num_k = len(cand_dict[PEPSICO[0]])
+    m = pyo.ConcreteModel("PepsiCo_Profit_McCormick_MILP")
 
     # ── Sets ──
     m.I_P = pyo.Set(initialize=PEPSICO)
     m.I_C = pyo.Set(initialize=COMPETITOR)
     m.I   = pyo.Set(initialize=ALL_PRODUCTS)
-    m.K   = pyo.Set(initialize=range(NUM_CANDIDATES))
+    m.K   = pyo.Set(initialize=range(num_k))
 
     # ── Parameters ──
-    m.p0 = pyo.Param(m.I, initialize={
-        i: products.loc[i, "current_price_mxn"] for i in ALL_PRODUCTS})
-    m.V0 = pyo.Param(m.I, initialize={
-        i: products.loc[i, "baseline_volume_units_wk"] for i in ALL_PRODUCTS})
-    m.s  = pyo.Param(m.I, initialize={
-        i: products.loc[i, "size_g"] for i in ALL_PRODUCTS})
-    m.c  = pyo.Param(m.I, initialize={
-        i: products.loc[i, "unit_cost_mxn"] for i in ALL_PRODUCTS},
-        mutable=True)
+    m.p0 = pyo.Param(m.I, initialize={i: float(products.loc[i, "current_price_mxn"]) for i in ALL_PRODUCTS})
+    m.V0 = pyo.Param(m.I, initialize={i: float(products.loc[i, "baseline_volume_units_wk"]) for i in ALL_PRODUCTS})
+    m.s  = pyo.Param(m.I, initialize={i: float(products.loc[i, "size_g"]) for i in ALL_PRODUCTS})
+    m.c  = pyo.Param(m.I, initialize={i: float(products.loc[i, "unit_cost_mxn"]) for i in ALL_PRODUCTS}, mutable=True)
 
-    # Candidate fractional price changes
-    delta_cand = {}
-    price_cand = {}
+    delta_cand, price_cand = {}, {}
     for i in PEPSICO:
-        for k_idx, pk in enumerate(candidates[i]):
-            delta_cand[i, k_idx] = (pk - products.loc[i, "current_price_mxn"]) / products.loc[i, "current_price_mxn"]
-            price_cand[i, k_idx] = pk
+        p0_i = float(products.loc[i, "current_price_mxn"])
+        for k_idx, pk in enumerate(cand_dict[i]):
+            delta_cand[i, k_idx] = (pk - p0_i) / p0_i
+            price_cand[i, k_idx] = float(pk)
+
     m.delta_cand = pyo.Param(m.I_P, m.K, initialize=delta_cand)
     m.price_cand = pyo.Param(m.I_P, m.K, initialize=price_cand)
 
-    # Competitor follow parameters
-    follow_hero = {i: int(products.loc[i, "follows_product"]) for i in COMPETITOR}
-    if follow_rho_override is None:
-        follow_rho = {i: products.loc[i, "follow_ratio"] for i in COMPETITOR}
-    elif isinstance(follow_rho_override, dict):
-        follow_rho = follow_rho_override
-    else:
-        follow_rho = {i: float(follow_rho_override) for i in COMPETITOR}
+    follow_hero = {c_id: int(products.loc[c_id, "follows_product"]) for c_id in COMPETITOR}
+    follow_rho  = {
+        c_id: (float(products.loc[c_id, "follow_ratio"]) if follow_rho_override is None else float(follow_rho_override))
+        for c_id in COMPETITOR
+    }
 
     # ── Decision Variables ──
     m.y = pyo.Var(m.I_P, m.K, within=pyo.Binary)
 
-    # ── Derived Expressions (all linear in y) ──
+    # McCormick bilinear variables w_{i,k,j,l} = y_{i,k} * y_{j,l} for i < j
+    pairs = [(i, k, j, l) for i in PEPSICO for k in range(num_k)
+             for j in PEPSICO if j > i for l in range(num_k)]
+    m.W_IDX = pyo.Set(initialize=pairs, dimen=4)
+    m.w = pyo.Var(m.W_IDX, bounds=(0.0, 1.0))
 
-    # δ for PepsiCo products
-    def delta_pep_rule(m, i):
-        return sum(m.delta_cand[i, k] * m.y[i, k] for k in m.K)
-    m.delta_pep = pyo.Expression(m.I_P, rule=delta_pep_rule)
+    m.mc1 = pyo.Constraint(m.W_IDX, rule=lambda m, i, k, j, l: m.w[i, k, j, l] <= m.y[i, k])
+    m.mc2 = pyo.Constraint(m.W_IDX, rule=lambda m, i, k, j, l: m.w[i, k, j, l] <= m.y[j, l])
+    m.mc3 = pyo.Constraint(m.W_IDX, rule=lambda m, i, k, j, l: m.w[i, k, j, l] >= m.y[i, k] + m.y[j, l] - 1.0)
 
-    # δ for all products (competitors follow hero)
-    def delta_all_rule(m, i):
-        if i in PEPSICO:
-            return m.delta_pep[i]
-        return follow_rho[i] * m.delta_pep[follow_hero[i]]
-    m.delta = pyo.Expression(m.I, rule=delta_all_rule)
+    def y_prod(i, k, j, l):
+        if i == j:
+            return m.y[i, k] if k == l else 0.0
+        elif i < j:
+            return m.w[i, k, j, l]
+        else:
+            return m.w[j, l, i, k]
 
-    # New price
-    def pnew_rule(m, i):
-        return m.p0[i] * (1 + m.delta[i])
-    m.pnew = pyo.Expression(m.I, rule=pnew_rule)
+    # ── Derived Expressions ──
+    m.delta_pep = pyo.Expression(m.I_P, rule=lambda m, i: sum(m.delta_cand[i, k] * m.y[i, k] for k in m.K))
+    m.delta     = pyo.Expression(m.I, rule=lambda m, i: m.delta_pep[i] if i in PEPSICO else follow_rho[i] * m.delta_pep[follow_hero[i]])
+    m.pnew      = pyo.Expression(m.I_P, rule=lambda m, i: sum(m.price_cand[i, k] * m.y[i, k] for k in m.K))
+    m.vol       = pyo.Expression(m.I, rule=lambda m, i: m.V0[i] * (1.0 + sum(E_matrix[i - 1, j - 1] * m.delta[j] for j in ALL_PRODUCTS)))
 
-    # Predicted volume (linearized: V0 * (1 + Σ E_ij δ_j))
-    def volume_rule(m, i):
-        return m.V0[i] * (1 + sum(E_matrix[i-1, j-1] * m.delta[j]
-                                  for j in ALL_PRODUCTS))
-    m.vol = pyo.Expression(m.I, rule=volume_rule)
+    # Effective elasticity matrix on PepsiCo decisions (incorporating competitor follow-through)
+    E_eff = np.zeros((len(PEPSICO), len(PEPSICO)))
+    for idx_i, i in enumerate(PEPSICO):
+        for idx_j, j in enumerate(PEPSICO):
+            val = E_matrix[i - 1, j - 1]
+            for c_id in COMPETITOR:
+                if follow_hero[c_id] == j:
+                    val += E_matrix[i - 1, c_id - 1] * follow_rho[c_id]
+            E_eff[idx_i, idx_j] = val
 
-    # Revenue per product (linearized)
-    def rev_rule(m, i):
-        return (m.V0[i] * m.p0[i] / m.s[i]) * \
-               (1 + m.delta[i] + sum(E_matrix[i-1, j-1] * m.delta[j]
-                                     for j in ALL_PRODUCTS))
-    m.rev = pyo.Expression(m.I, rule=rev_rule)
+    # Exact Revenue Rev_i = p_i * V_i via McCormick products
+    def rev_exact_prod_rule(m, i):
+        idx_i = PEPSICO.index(i)
+        expr = 0.0
+        for k in m.K:
+            pk = m.price_cand[i, k]
+            expr += pk * m.V0[i] * m.y[i, k]
+            for idx_j, j in enumerate(PEPSICO):
+                for l in m.K:
+                    expr += pk * m.V0[i] * E_eff[idx_i, idx_j] * m.delta_cand[j, l] * y_prod(i, k, j, l)
+        return expr
 
-    # Profit per product
-    def prof_rule(m, i):
-        return m.rev[i] - m.c[i] * m.vol[i] / m.s[i]
-    m.prof = pyo.Expression(m.I, rule=prof_rule)
+    m.rev  = pyo.Expression(m.I_P, rule=rev_exact_prod_rule)
+    m.prof = pyo.Expression(m.I_P, rule=lambda m, i: m.rev[i] - m.c[i] * m.vol[i])
 
-    # Totals for PepsiCo
-    m.total_rev  = pyo.Expression(expr=sum(m.rev[i]  for i in PEPSICO))
+    m.total_rev  = pyo.Expression(expr=sum(m.rev[i] for i in PEPSICO))
     m.total_prof = pyo.Expression(expr=sum(m.prof[i] for i in PEPSICO))
 
-    # ── Objective: maximize PepsiCo revenue ──
-    m.obj = pyo.Objective(expr=m.total_rev, sense=pyo.maximize)
+    # ── Objective: Maximize Total Weekly PepsiCo Gross Profit (MXN/wk) ──
+    m.obj = pyo.Objective(expr=m.total_prof, sense=pyo.maximize)
 
     # ── Constraints ──
+    m.c_selection = pyo.Constraint(m.I_P, rule=lambda m, i: sum(m.y[i, k] for k in m.K) == 1)
+    m.c_rev_floor = pyo.Constraint(expr=m.total_rev >= min_rev_frac * BASELINE_REV)
+    m.c_margin    = pyo.Constraint(expr=m.total_prof >= min_margin * m.total_rev)
+    m.c_ladder    = pyo.Constraint(
+        range(len(LADDER_PAIRS)),
+        rule=lambda m, idx: m.pnew[LADDER_PAIRS[idx][0]] / m.s[LADDER_PAIRS[idx][0]]
+                            <= m.pnew[LADDER_PAIRS[idx][1]] / m.s[LADDER_PAIRS[idx][1]]
+    )
+    m.c_vol_pos   = pyo.Constraint(m.I_P, rule=lambda m, i: m.vol[i] >= 0.0)
 
-    # (C1) Exactly one price per PepsiCo product
-    def selection_rule(m, i):
-        return sum(m.y[i, k] for k in m.K) == 1
-    m.c_selection = pyo.Constraint(m.I_P, rule=selection_rule)
-
-    # (C2) Revenue floor: total revenue ≥ fraction of baseline
-    m.c_rev_floor = pyo.Constraint(
-        expr=m.total_rev >= min_rev_frac * BASELINE_REV)
-
-    # (C3) Margin floor: total profit ≥ fraction of total revenue
-    m.c_margin = pyo.Constraint(
-        expr=m.total_prof >= min_margin * m.total_rev)
-
-    # (C4) Price ladders (larger pack ≤ per-gram price of smaller pack)
-    def ladder_rule(m, pair_idx):
-        big, small = LADDER_PAIRS[pair_idx]
-        return m.pnew[big] / m.s[big] <= m.pnew[small] / m.s[small]
-    m.c_ladder = pyo.Constraint(range(len(LADDER_PAIRS)), rule=ladder_rule)
-
-    # (C5) Non-negative volume
-    def vol_pos_rule(m, i):
-        return m.vol[i] >= 0
-    m.c_vol_pos = pyo.Constraint(m.I, rule=vol_pos_rule)
-
-    # (C6) Maximum average price increase
-    total_p0 = sum(products.loc[i, "current_price_mxn"] for i in PEPSICO)
+    total_p0 = sum(float(products.loc[i, "current_price_mxn"]) for i in PEPSICO)
     m.c_avg_increase = pyo.Constraint(
-        expr=sum(m.p0[i] * m.delta_pep[i] for i in PEPSICO)
-             <= max_avg_inc * total_p0)
+        expr=sum(m.p0[i] * m.delta_pep[i] for i in PEPSICO) <= max_avg_inc * total_p0
+    )
 
     return m
 
 # ─────────────────────────────────────────────
-# 2.4  SOLVER
+# 2.4  SOLVER & EXTRACTION HELPERS
 # ─────────────────────────────────────────────
 
 def solve_model(m, solver_name="glpk"):
     """Solve the Pyomo model with the given solver."""
     solver = pyo.SolverFactory(solver_name)
-    result = solver.solve(m, tee=False)
-    return result
+    return solver.solve(m, tee=False)
 
 def get_chosen_prices(m):
     """Return {product_id: chosen_price} for all PepsiCo products."""
-    chosen = {}
-    for i in PEPSICO:
-        chosen_k = [k for k in range(NUM_CANDIDATES)
-                    if pyo.value(m.y[i, k]) > 0.5][0]
-        chosen[i] = candidates[i][chosen_k]
-    return chosen
+    num_k = len(m.K)
+    return {
+        i: int(round(pyo.value(m.price_cand[i, [k for k in range(num_k) if pyo.value(m.y[i, k]) > 0.5][0]])))
+        for i in PEPSICO
+    }
 
 def extract_results(m):
     """Extract a results DataFrame from a solved model."""
+    num_k = len(m.K)
     rows = []
     for i in PEPSICO:
-        chosen_k = [k for k in range(NUM_CANDIDATES)
-                     if pyo.value(m.y[i, k]) > 0.5][0]
-        new_p = candidates[i][chosen_k]
-        old_p = products.loc[i, "current_price_mxn"]
+        chosen_k = [k for k in range(num_k) if pyo.value(m.y[i, k]) > 0.5][0]
+        new_p = int(round(pyo.value(m.price_cand[i, chosen_k])))
+        old_p = int(products.loc[i, "current_price_mxn"])
         delta_pct = (new_p - old_p) / old_p * 100
         vol_new = pyo.value(m.vol[i])
         vol_old = products.loc[i, "baseline_volume_units_wk"]
         rev_new = pyo.value(m.rev[i])
+        prof_new = pyo.value(m.prof[i])
         rows.append({
             "Product": products.loc[i, "name"],
             "Old Price": old_p,
             "New Price": new_p,
             "Price Δ%": f"{delta_pct:+.1f}%",
-            "Old Volume": vol_old,
-            "New Volume": f"{vol_new:.0f}",
-            "Volume Δ%": f"{(vol_new - vol_old)/vol_old*100:+.1f}%",
-            "Revenue (MXN)": f"{rev_new:.1f}",
+            "Old Vol": vol_old,
+            "New Vol": f"{vol_new:.1f}",
+            "Vol Δ%": f"{(vol_new - vol_old)/vol_old*100:+.1f}%",
+            "Rev (MXN)": f"{rev_new:,.2f}",
+            "Profit (MXN)": f"{prof_new:,.2f}",
         })
     return pd.DataFrame(rows)
 
@@ -360,14 +319,15 @@ if __name__ == "__main__":
 
     model = build_model()
 
-    print(f"\n  Decision variables : {len(list(model.y))} binary (y_{{i,k}})")
+    print(f"\n  Decision variables : {len(list(model.y))} binary (y_{{i,k}}), {len(list(model.w))} McCormick (w)")
     print(f"  Products optimized : {len(PEPSICO)}")
     print(f"  Candidates/product : {NUM_CANDIDATES}")
     print(f"  Constraints        : selection({len(PEPSICO)}) + "
           f"rev_floor(1) + margin(1) + ladders({len(LADDER_PAIRS)}) + "
-          f"vol_pos({len(ALL_PRODUCTS)}) + avg_inc(1)")
-    print(f"  Baseline revenue   : {BASELINE_REV:,.1f} MXN/week")
-    print(f"  Baseline margin    : {BASELINE_PROF/BASELINE_REV:.1%}")
+          f"vol_pos({len(PEPSICO)}) + avg_inc(1) + McCormick({3 * len(model.W_IDX)})")
+    print(f"  Baseline profit    : {BASELINE_PROF:,.2f} MXN/week")
+    print(f"  Baseline revenue   : {BASELINE_REV:,.2f} MXN/week")
+    print(f"  Baseline margin    : {BASELINE_PROF/BASELINE_REV:.2%}")
 
     print(f"\n  Solving with GLPK...")
     result = solve_model(model)
@@ -375,10 +335,9 @@ if __name__ == "__main__":
 
     opt_rev = pyo.value(model.total_rev)
     opt_prof = pyo.value(model.total_prof)
-    print(f"\n  Optimal revenue : {opt_rev:,.1f} MXN/week")
-    print(f"  Optimal profit  : {opt_prof:,.1f} MXN/week")
-    print(f"  Optimal margin  : {opt_prof/opt_rev:.1%}")
-    print(f"  Revenue uplift  : {(opt_rev/BASELINE_REV - 1)*100:+.2f}%")
+    print(f"\n  Optimal profit  : {opt_prof:,.2f} MXN/week ({(opt_prof/BASELINE_PROF - 1)*100:+.2f}%)")
+    print(f"  Optimal revenue : {opt_rev:,.2f} MXN/week ({(opt_rev/BASELINE_REV - 1)*100:+.2f}%)")
+    print(f"  Optimal margin  : {opt_prof/opt_rev:.2%}")
 
     print("\n  Results table:")
     df = extract_results(model)
